@@ -72,11 +72,16 @@ export function proporCandidatos(blocos: Bloco[], tituloDoLivro: string): { cand
   return { candidatos, abertura };
 }
 
-/** Capítulos aprovados → texto de cada um. Sem nenhum aprovado, o livro inteiro é um capítulo. */
+/**
+ * Capítulos aprovados → texto de cada um. Sem nenhum aprovado, o livro inteiro
+ * é um capítulo, com o nome do livro (e o nome do livro no topo do arquivo não
+ * é lido duas vezes).
+ */
 export function montarCapitulos(
   blocos: Bloco[],
   aprovados: { pos: number; titulo: string }[],
   incluirAbertura: boolean,
+  tituloDoLivro = "",
 ): CapituloTexto[] {
   const ordem = [...aprovados]
     .filter((a) => Number.isInteger(a.pos) && a.pos >= 0 && a.pos < blocos.length)
@@ -84,8 +89,10 @@ export function montarCapitulos(
   const juntar = (de: number, ate: number) =>
     blocos.slice(de, ate).filter((b) => b.t === "p").map((b) => b.x).join("\n\n");
   if (ordem.length === 0) {
-    const texto = juntar(0, blocos.length);
-    return texto ? [{ titulo: "", texto }] : [];
+    const titulo = tituloDoLivro.replace(/\s+/g, " ").trim().slice(0, 120);
+    const capa = blocos.findIndex((b, pos) => pos < 3 && titulo && normal(b.x) === normal(titulo));
+    const texto = juntar(capa + 1, blocos.length);
+    return texto ? [{ titulo, texto }] : [];
   }
   const capitulos: CapituloTexto[] = [];
   if (incluirAbertura) {

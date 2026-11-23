@@ -372,7 +372,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
 
   return (
     <div className="min-h-full">
-      <main className="mx-auto max-w-4xl px-5 py-10">
+      <div className="mx-auto max-w-3xl px-5 py-10">
         {dono && <div className="mb-6"><Etapas atual={3} /></div>}
         <div className="mb-8">
           <p className="text-sm font-medium text-latao mb-1">Audiolivro</p>
@@ -677,7 +677,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
             </section>
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }

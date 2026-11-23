@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         .map((a) => ({ pos: a.pos as number, titulo: typeof a.titulo === "string" ? a.titulo : "" }))
         .slice(0, 400)
     : [];
-  const capitulos = montarCapitulos(m.blocos, aprovados, body.incluir_abertura === true);
+  const capitulos = montarCapitulos(m.blocos, aprovados, body.incluir_abertura === true, livro.titulo);
   if (!capitulos.some((c) => c.texto)) return erro(422, "Os capítulos marcados não têm texto.");
   const { capitulos: dentro, cortado } = cortarNoLimite(capitulos, LIMITE_CARACTERES);
   if (!(await gravarCapitulos(admin, id, dentro, cortado))) return erro(500, "Falha ao guardar os capítulos.");

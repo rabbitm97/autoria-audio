@@ -8,7 +8,7 @@ const livro = Literata({ variable: "--fonte-livro", subsets: ["latin"], style: [
 
 export const metadata: Metadata = {
   title: "Autoria Áudio",
-  description: "Envie o manuscrito em .docx e ouça o seu livro narrado, um arquivo por capítulo.",
+  description: "Envie o manuscrito em .docx, .pdf ou .txt e ouça o seu livro narrado, um arquivo por capítulo.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

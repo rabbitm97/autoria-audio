@@ -92,6 +92,20 @@ export async function lerLivro(admin: SupabaseClient, id: string): Promise<Livro
   return (data as LivroRegistro | null) ?? null;
 }
 
+/** Livro de exemplo da página inicial (o mais recente marcado), já narrado. */
+export async function livroDeExemplo(admin: SupabaseClient): Promise<LivroRegistro | null> {
+  const { data, error } = await admin
+    .from("livros")
+    .select(COLUNAS)
+    .eq("exemplo", true)
+    .not("dados", "is", null)
+    .order("criado_em", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) console.error("[livros] exemplo:", error.message);
+  return (data as LivroRegistro | null) ?? null;
+}
+
 /** O token enviado (cabeçalho x-livro-token) é o do livro? */
 export async function tokenConfere(admin: SupabaseClient, id: string, req: Request): Promise<boolean> {
   const token = req.headers.get("x-livro-token");

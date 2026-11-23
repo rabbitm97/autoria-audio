@@ -116,14 +116,37 @@ export async function sintetizar(texto: string, voz: string, formato: FormatoVoz
     throw new ErroTts(`Gemini respondeu sem áudio (finishReason=${cand?.finishReason ?? "?"}).`, "temporario");
   }
   const mime = parte.inlineData.mimeType ?? "";
-  const taxa = Number(/rate=(\d+)/.exec(mime)?.[1] ?? TAXA_GEMINI);
-  const bytes = Uint8Array.from(Buffer.from(parte.inlineData.data, "base64"));
+  const bruto = Uint8Array.from(Buffer.from(parte.inlineData.data, "base64"));
+  const { bytes, taxa } = audioDaResposta(bruto, mime);
   return {
     pcm: pcmDeBytes(bytes),
     taxa,
     tokensEntrada: data.usageMetadata?.promptTokenCount ?? null,
     tokensSaida: data.usageMetadata?.candidatesTokenCount ?? null,
   };
+}
+
+/**
+ * A voz chega em PCM puro (modelos de voz até a geração 3.1) ou em WAV (3.8).
+ * No WAV, descarta o cabeçalho (senão ele vira um estalo no começo do
+ * trecho) e lê a taxa do próprio arquivo.
+ */
+function audioDaResposta(bruto: Uint8Array, mime: string): { bytes: Uint8Array; taxa: number } {
+  const marca = (i: number) => String.fromCharCode(bruto[i], bruto[i + 1], bruto[i + 2], bruto[i + 3]);
+  if (bruto.length < 44 || marca(0) !== "RIFF" || marca(8) !== "WAVE") {
+    return { bytes: bruto, taxa: Number(/rate=(\d+)/.exec(mime)?.[1] ?? TAXA_GEMINI) };
+  }
+  const dv = new DataView(bruto.buffer, bruto.byteOffset, bruto.byteLength);
+  let taxa = TAXA_GEMINI;
+  let pos = 12;
+  while (pos + 8 <= bruto.length) {
+    const id = marca(pos);
+    const tamanho = dv.getUint32(pos + 4, true);
+    if (id === "fmt " && pos + 16 <= bruto.length) taxa = dv.getUint32(pos + 12, true);
+    if (id === "data") return { bytes: bruto.subarray(pos + 8, Math.min(bruto.length, pos + 8 + tamanho)), taxa };
+    pos += 8 + tamanho + (tamanho % 2);
+  }
+  return { bytes: bruto.subarray(44), taxa };
 }
 
 const PEDIDO_TRANSCRICAO =

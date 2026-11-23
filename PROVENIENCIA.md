@@ -9,12 +9,13 @@ Os módulos de áudio em `lib/audiolivro/` vêm do motor de audiolivro da Autori
 | `lib/audiolivro/conferir.ts` | motor Autoria |
 | `lib/audiolivro/config.ts` | motor Autoria |
 | `lib/audiolivro/dividir.ts` | motor Autoria |
-| `lib/audiolivro/gemini.ts` | motor Autoria |
+| `lib/audiolivro/gemini.ts` | motor Autoria; leitura da resposta em WAV acrescentada neste repositório |
 | `lib/audiolivro/mp3.ts` | motor Autoria |
 | `lib/audiolivro/nomes.ts` | motor Autoria |
 | `lib/audiolivro/normalizar.ts` | motor Autoria |
 | `lib/audiolivro/numeros.ts` | motor Autoria |
 | `lib/audiolivro/pcm.ts` | motor Autoria |
+| `lib/audiolivro/motor.ts` | motor Autoria, adaptado neste repositório: livro lido do .docx, banco e arquivos próprios da demonstração, sem conta de usuário, cobrança, e-mail nem prazo de guarda |
 | esqueleto Next.js | gerado com `create-next-app` (código aberto) |
 | todo o resto | escrito neste repositório |
 

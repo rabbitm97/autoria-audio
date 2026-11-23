@@ -26,8 +26,8 @@ async function Exemplo() {
   const total = capitulos.reduce((s, c) => s + (c.duracao_ms ?? 0), 0);
   const voz = AUDIO_VOZES.find((v) => v.id === dados.voz)?.nome ?? dados.voz;
   return (
-    <section aria-labelledby="exemplo-titulo" className="mt-10 rounded-2xl border border-linha bg-folha p-5 sm:p-6">
-      <p className="text-sm text-tinta-suave">Ouça antes de enviar</p>
+    <section aria-labelledby="exemplo-titulo" className="mt-8 rounded-lg border border-linha bg-folha p-5 sm:p-6">
+      <p className="text-sm text-tinta-suave">Ouça um exemplo pronto</p>
       <h2 id="exemplo-titulo" className="mt-1 font-serif text-2xl text-tinta">
         {livro.titulo}, de {livro.autor}
       </h2>
@@ -62,8 +62,8 @@ export default async function Home() {
       <p className="mt-4 max-w-[60ch] text-lg text-tinta-suave">
         O audiolivro da Autoria: do arquivo do livro a um áudio por capítulo, com a voz que você escolher, os nomes ditos do seu jeito e cada trecho conferido antes de ir para o arquivo final.
       </p>
-      <Exemplo />
       <Assistente />
+      <Exemplo />
     </div>
   );
 }

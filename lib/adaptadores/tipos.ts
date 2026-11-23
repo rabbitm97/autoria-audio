@@ -7,7 +7,27 @@ import type { Pronuncia } from "@/lib/audiolivro/normalizar";
 
 export type { Pronuncia };
 
-/** Um capítulo lido do .docx. Título vazio = texto antes do primeiro título. */
+/** Bloco do manuscrito: título (h1-h3, estilos do Word) ou parágrafo. */
+export interface Bloco {
+  t: "h1" | "h2" | "h3" | "p";
+  x: string;
+}
+
+export type OrigemCandidato = "estilo" | "padrao" | "maiusculas";
+
+/** Possível início de capítulo, para o autor aprovar. */
+export interface Candidato {
+  /** Posição do bloco de título no manuscrito. */
+  pos: number;
+  titulo: string;
+  origem: OrigemCandidato;
+  marcado: boolean;
+  /** Começo do texto que vem depois (para o autor reconhecer o capítulo). */
+  inicio: string;
+  caracteres: number;
+}
+
+/** Um capítulo aprovado. Título vazio = texto antes do primeiro capítulo. */
 export interface CapituloTexto {
   titulo: string;
   texto: string;
@@ -42,8 +62,9 @@ export interface LivroRegistro {
   titulo: string;
   subtitulo: string | null;
   autor: string;
-  capitulos: CapituloTexto[];
-  texto_hash: string;
+  /** null enquanto os capítulos não foram aprovados. */
+  capitulos: CapituloTexto[] | null;
+  texto_hash: string | null;
   cortado: boolean;
   dados: DadosAudio | null;
   exemplo: boolean;

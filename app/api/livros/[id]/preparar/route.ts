@@ -17,6 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!(await tokenConfere(admin, id, req))) return erro(403, "Só quem enviou o livro pode narrar.");
   const livro = await lerLivro(admin, id);
   if (!livro) return erro(404, "Livro não encontrado.");
+  if (!livro.capitulos) return erro(409, "Aprove os capítulos antes de narrar.", { reason: "capitulos" });
   const body = (await req.json().catch(() => ({}))) as { voz?: unknown; pronuncias?: unknown };
 
   // Primeira narração deste livro conta no limite do dia.

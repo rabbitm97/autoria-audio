@@ -21,5 +21,5 @@ export const LIMITE_ENVIOS_IP_DIA = numero("LIMITE_ENVIOS_IP_DIA", 15);
 /** Trechos refeitos ou editados a pedido, por livro. */
 export const LIMITE_REGENERACOES = numero("LIMITE_REGENERACOES", 10);
 
-/** Tamanho máximo do .docx enviado. */
-export const TAMANHO_MAX_DOCX = 4 * 1024 * 1024;
+/** Tamanho máximo do manuscrito enviado (.docx, .pdf ou .txt). */
+export const TAMANHO_MAX_MANUSCRITO = 50 * 1024 * 1024;

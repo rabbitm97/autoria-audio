@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { lerToken } from "@/app/_componentes/token";
+import Etapas from "@/app/_componentes/etapas";
+import AprovacaoCapitulos from "@/app/_componentes/aprovacao-capitulos";
 
 // ─── Tipos da resposta de GET /api/livros/[id] ─────────────────────────────
 
@@ -11,7 +13,13 @@ interface CapPrevia { index: number; titulo: string; caracteres: number; trechos
 interface CapAudio { index: number; titulo: string; trechos: number; duracao_ms: number | null; url: string | null; arquivo: string | null }
 interface Status { total: number; prontos: number; pendentes: number; gerando: number; falhos: number; com_aviso: number; capitulos: number; capitulos_montados: number; terminado: boolean }
 interface Pronuncia { grafia: string; fala: string }
+interface EstadoCapitulos {
+  livro: Estado["livro"];
+  dono: boolean;
+  etapa: "capitulos";
+}
 interface Estado {
+  etapa: "narracao";
   livro: { id: string; titulo: string; subtitulo: string | null; autor: string; cortado: boolean; exemplo: boolean };
   dono: boolean;
   limite_caracteres: number;
@@ -49,7 +57,7 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // ─── Tela ───────────────────────────────────────────────────────────────────
 
 export default function TelaLivro({ id }: { id: string }) {
-  const [estado, setEstado] = useState<Estado | null>(null);
+  const [estado, setEstado] = useState<Estado | EstadoCapitulos | null>(null);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [narrando, setNarrando] = useState(false);
@@ -63,15 +71,15 @@ export default function TelaLivro({ id }: { id: string }) {
     [token],
   );
 
-  const carregar = useCallback(async (): Promise<Estado | null> => {
+  const carregar = useCallback(async (): Promise<Estado | EstadoCapitulos | null> => {
     const res = await fetch(`/api/livros/${id}`, { headers: cabecalhos(), cache: "no-store" });
     const json = await res.json().catch(() => null);
     if (!res.ok || !json) {
       setErroCarga(json?.error ?? "Não foi possível abrir este livro.");
       return null;
     }
-    setEstado(json as Estado);
-    return json as Estado;
+    setEstado(json as Estado | EstadoCapitulos);
+    return json as Estado | EstadoCapitulos;
   }, [id, cabecalhos]);
 
   // Token deste navegador (só quem enviou o livro tem).
@@ -151,11 +159,27 @@ export default function TelaLivro({ id }: { id: string }) {
     return <div className="mx-auto max-w-3xl px-5 py-12 text-tinta-suave">Abrindo o livro…</div>;
   }
 
+  if (estado.etapa === "capitulos") {
+    return (
+      <div className="mx-auto max-w-3xl px-5 py-10">
+        <Etapas atual={2} />
+        <h1 className="mt-6 font-serif text-3xl leading-tight sm:text-4xl">{estado.livro.titulo}</h1>
+        <p className="mt-2 text-tinta-suave">{estado.livro.autor}</p>
+        {estado.dono && token ? (
+          <AprovacaoCapitulos id={id} token={token} onAprovado={() => void carregar()} />
+        ) : (
+          <p className="mt-6 text-tinta-suave">Este livro ainda está sendo preparado.</p>
+        )}
+      </div>
+    );
+  }
+
   const { livro, audio, status, dono } = estado;
   const faltando = status.pendentes + status.gerando;
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-10">
+      {dono && <div className="mb-6"><Etapas atual={3} /></div>}
       <h1 className="font-serif text-3xl leading-tight sm:text-4xl">{livro.titulo}</h1>
       {livro.subtitulo && <p className="mt-1 font-serif text-lg italic text-tinta-suave">{livro.subtitulo}</p>}
       <p className="mt-2 text-tinta-suave">{livro.autor}</p>

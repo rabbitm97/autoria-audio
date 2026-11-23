@@ -18,3 +18,6 @@ export function supabaseAdmin(): SupabaseClient {
 }
 
 export const BUCKET = "audiolivros";
+
+/** Arquivo do manuscrito enviado; apagado depois da leitura. */
+export const BUCKET_MANUSCRITOS = "manuscritos";

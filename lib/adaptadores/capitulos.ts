@@ -1,110 +1,103 @@
 // lib/adaptadores/capitulos.ts
 //
-// Lê um .docx e devolve os capítulos (título + texto). Usa o mammoth
-// (código aberto) para converter o documento em HTML simples e procura os
-// títulos de capítulo nesta ordem:
-//   1. estilos de título do Word (Título 1, ou Título 2 se o 1 for só o nome do livro);
-//   2. parágrafos curtos que começam com "Capítulo", "Parte", "Prólogo"...
-//      ou são só um número (1, 2, IV);
-//   3. nenhum título achado: o texto inteiro vira um capítulo só.
-// Texto antes do primeiro título (folha de rosto, dedicatória) fica de fora
-// quando é curto.
+// Proposta de capítulos e montagem depois da aprovação do autor.
+//   Proposta: cada bloco que parece título vira candidato, com a origem
+//   ("Título do Word", "Começa com Capítulo, Parte...", "Linha em
+//   maiúsculas"). Vêm marcados os do tipo mais confiável que aparece pelo
+//   menos duas vezes; o autor marca, desmarca e renomeia.
+//   Montagem: cada capítulo aprovado leva os parágrafos até o próximo. O
+//   texto antes do primeiro capítulo (folha de rosto, dedicatória) entra só
+//   se o autor pedir.
 
-import mammoth from "mammoth";
-import type { CapituloTexto } from "./tipos";
-
-interface Bloco {
-  tipo: "h1" | "h2" | "h3" | "p";
-  texto: string;
-}
-
-const ENTIDADES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-
-function textoDoHtml(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e: string) => {
-      if (e[0] === "#") {
-        const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-        return Number.isFinite(n) ? String.fromCodePoint(n) : m;
-      }
-      return ENTIDADES[e.toLowerCase()] ?? m;
-    })
-    .replace(/[ \t ]+/g, " ")
-    .trim();
-}
-
-function blocos(html: string): Bloco[] {
-  const r: Bloco[] = [];
-  const re = /<(h[1-6]|p)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi;
-  for (const m of html.matchAll(re)) {
-    const tag = m[1].toLowerCase();
-    const texto = textoDoHtml(m[2]);
-    if (!texto) continue;
-    const tipo: Bloco["tipo"] = tag === "h1" ? "h1" : tag === "h2" ? "h2" : tag === "p" ? "p" : "h3";
-    r.push({ tipo, texto });
-  }
-  return r;
-}
+import type { Bloco, Candidato, CapituloTexto, OrigemCandidato } from "./tipos";
 
 const TITULO_POR_TEXTO =
-  /^(cap[ií]tulo|parte|pr[oó]logo|ep[ií]logo|introdu[cç][aã]o|apresenta[cç][aã]o|pref[aá]cio|posf[aá]cio|conclus[aã]o)\b/i;
+  /^(cap[ií]tulo|parte|livro|pr[oó]logo|ep[ií]logo|introdu[cç][aã]o|apresenta[cç][aã]o|pref[aá]cio|posf[aá]cio|conclus[aã]o|nota d[oa] autor[a]?|agradecimentos)\b/i;
 const SO_NUMERO = /^(\d{1,3}|[IVXLC]{1,7})[.)]?$/;
 
-function pareceTitulo(b: Bloco): boolean {
-  return b.texto.length <= 80 && (TITULO_POR_TEXTO.test(b.texto) || SO_NUMERO.test(b.texto));
+function emMaiusculas(x: string): boolean {
+  const letras = x.replace(/[^\p{L}]/gu, "");
+  return letras.length >= 3 && letras === letras.toLocaleUpperCase("pt-BR") && letras !== letras.toLocaleLowerCase("pt-BR");
 }
 
-/** Texto antes do primeiro capítulo menor que isso (folha de rosto, dedicatória) fica de fora. */
-const ABERTURA_MINIMA = 300;
-
-export interface LeituraDocx {
-  capitulos: CapituloTexto[];
-  /** Como os capítulos foram achados (mostrado ao autor). */
-  criterio: "estilos" | "texto" | "unico";
+function origemDe(b: Bloco): OrigemCandidato | null {
+  if (b.t !== "p") return "estilo";
+  if (b.x.length <= 80 && (TITULO_POR_TEXTO.test(b.x) || SO_NUMERO.test(b.x))) return "padrao";
+  if (b.x.length <= 60 && emMaiusculas(b.x) && !/[.,;]$/.test(b.x)) return "maiusculas";
+  return null;
 }
 
-export function capitulosDosBlocos(lista: Bloco[]): LeituraDocx {
-  const h1 = lista.filter((b) => b.tipo === "h1").length;
-  const h2 = lista.filter((b) => b.tipo === "h2").length;
-  let ehTitulo: ((b: Bloco) => boolean) | null = null;
-  let criterio: LeituraDocx["criterio"] = "unico";
-  if (h1 >= 2) {
-    ehTitulo = (b) => b.tipo === "h1";
-    criterio = "estilos";
-  } else if (h2 >= 2) {
-    ehTitulo = (b) => b.tipo === "h2";
-    criterio = "estilos";
-  } else if (lista.filter(pareceTitulo).length >= 2) {
-    ehTitulo = pareceTitulo;
-    criterio = "texto";
-  }
+const normal = (s: string) => s.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
 
-  const capitulos: CapituloTexto[] = [];
-  let atual: CapituloTexto = { titulo: "", texto: "" };
-  const fechar = () => {
-    const texto = atual.texto.trim();
-    if (atual.titulo === "" && texto.length < ABERTURA_MINIMA && ehTitulo) return; // folha de rosto
-    if (texto || atual.titulo) capitulos.push({ titulo: atual.titulo, texto });
-  };
-  for (const b of lista) {
-    if (ehTitulo && ehTitulo(b)) {
-      fechar();
-      atual = { titulo: b.texto, texto: "" };
-      continue;
+export function proporCandidatos(blocos: Bloco[], tituloDoLivro: string): { candidatos: Candidato[]; abertura: number } {
+  const brutos: { pos: number; origem: OrigemCandidato; nivel: number }[] = [];
+  blocos.forEach((b, pos) => {
+    const origem = origemDe(b);
+    if (!origem) return;
+    // O nome do livro no topo do arquivo não é capítulo.
+    if (pos < 3 && normal(b.x) === normal(tituloDoLivro)) return;
+    brutos.push({ pos, origem, nivel: b.t === "h1" ? 1 : b.t === "h2" ? 2 : b.t === "h3" ? 3 : 9 });
+  });
+
+  // O que vem marcado: o tipo mais confiável que aparece pelo menos 2 vezes.
+  const conta = (f: (c: (typeof brutos)[number]) => boolean) => brutos.filter(f).length;
+  let marcar: (c: (typeof brutos)[number]) => boolean = () => false;
+  for (const nivel of [1, 2, 3]) {
+    if (conta((c) => c.origem === "estilo" && c.nivel === nivel) >= 2) {
+      marcar = (c) => c.origem === "estilo" && c.nivel === nivel;
+      break;
     }
-    // Com títulos por estilo, um h1 isolado (nome do livro no começo) não vira texto falado.
-    if (ehTitulo && b.tipo !== "p" && atual.titulo === "" && atual.texto === "") continue;
-    atual.texto += (atual.texto ? "\n\n" : "") + b.texto;
   }
-  fechar();
-  return { capitulos: capitulos.filter((c) => c.texto.length > 0), criterio };
+  if (conta(marcar) === 0 && conta((c) => c.origem === "padrao") >= 2) marcar = (c) => c.origem === "padrao";
+  if (conta(marcar) === 0) {
+    const n = conta((c) => c.origem === "maiusculas");
+    if (n >= 2 && n <= 80) marcar = (c) => c.origem === "maiusculas";
+  }
+
+  const fimDe = (i: number) => (i + 1 < brutos.length ? brutos[i + 1].pos : blocos.length);
+  const textoEntre = (de: number, ate: number) => blocos.slice(de, ate).filter((b) => b.t === "p");
+  const candidatos: Candidato[] = brutos.slice(0, 400).map((c, i) => {
+    const corpo = textoEntre(c.pos + 1, fimDe(i));
+    return {
+      pos: c.pos,
+      titulo: blocos[c.pos].x.slice(0, 120),
+      origem: c.origem,
+      marcado: marcar(c),
+      inicio: corpo.map((b) => b.x).join(" ").slice(0, 140),
+      caracteres: corpo.reduce((s, b) => s + b.x.length, 0),
+    };
+  });
+  const primeiro = brutos[0]?.pos ?? blocos.length;
+  const abertura = textoEntre(0, primeiro).reduce((s, b) => s + b.x.length, 0);
+  return { candidatos, abertura };
 }
 
-export async function lerDocx(buffer: Buffer): Promise<LeituraDocx> {
-  const { value } = await mammoth.convertToHtml({ buffer });
-  return capitulosDosBlocos(blocos(value));
+/** Capítulos aprovados → texto de cada um. Sem nenhum aprovado, o livro inteiro é um capítulo. */
+export function montarCapitulos(
+  blocos: Bloco[],
+  aprovados: { pos: number; titulo: string }[],
+  incluirAbertura: boolean,
+): CapituloTexto[] {
+  const ordem = [...aprovados]
+    .filter((a) => Number.isInteger(a.pos) && a.pos >= 0 && a.pos < blocos.length)
+    .sort((a, b) => a.pos - b.pos);
+  const juntar = (de: number, ate: number) =>
+    blocos.slice(de, ate).filter((b) => b.t === "p").map((b) => b.x).join("\n\n");
+  if (ordem.length === 0) {
+    const texto = juntar(0, blocos.length);
+    return texto ? [{ titulo: "", texto }] : [];
+  }
+  const capitulos: CapituloTexto[] = [];
+  if (incluirAbertura) {
+    const abertura = juntar(0, ordem[0].pos);
+    if (abertura) capitulos.push({ titulo: "", texto: abertura });
+  }
+  ordem.forEach((a, i) => {
+    const fim = i + 1 < ordem.length ? ordem[i + 1].pos : blocos.length;
+    const titulo = a.titulo.replace(/\s+/g, " ").trim().slice(0, 120) || blocos[a.pos].x.slice(0, 120);
+    capitulos.push({ titulo, texto: juntar(a.pos + 1, fim) });
+  });
+  return capitulos;
 }
 
 /**
@@ -122,9 +115,8 @@ export function cortarNoLimite(capitulos: CapituloTexto[], limite: number): { ca
       continue;
     }
     if (r.length === 0) {
-      const partes = c.texto.split("\n\n");
       let texto = "";
-      for (const p of partes) {
+      for (const p of c.texto.split("\n\n")) {
         const novo = texto ? `${texto}\n\n${p}` : p;
         if (novo.length > limite) break;
         texto = novo;

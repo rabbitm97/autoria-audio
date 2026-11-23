@@ -8,7 +8,7 @@
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CapituloTexto, DadosAudio, LivroRegistro } from "./tipos";
+import type { Bloco, Candidato, CapituloTexto, DadosAudio, LivroRegistro } from "./tipos";
 
 const COLUNAS = "id, titulo, subtitulo, autor, capitulos, texto_hash, cortado, dados, exemplo, criado_em";
 
@@ -32,9 +32,10 @@ export function textoDoLivro(capitulos: CapituloTexto[]): string {
   return capitulos.map((c) => `${c.titulo}\n${c.texto}`).join("\n\n");
 }
 
+/** Cria o livro (ainda sem capítulos) e devolve o token de quem enviou. */
 export async function criarLivro(
   admin: SupabaseClient,
-  args: { titulo: string; subtitulo: string | null; autor: string; capitulos: CapituloTexto[]; cortado: boolean; ipHash: string },
+  args: { titulo: string; subtitulo: string | null; autor: string; formato: string; ipHash: string },
 ): Promise<{ id: string; token: string } | null> {
   const token = randomBytes(24).toString("base64url");
   const { data, error } = await admin
@@ -43,9 +44,8 @@ export async function criarLivro(
       titulo: args.titulo,
       subtitulo: args.subtitulo,
       autor: args.autor,
-      capitulos: args.capitulos,
-      texto_hash: md5(textoDoLivro(args.capitulos)),
-      cortado: args.cortado,
+      formato: args.formato,
+      declaracao_aceita_em: new Date().toISOString(),
       token_hash: sha256(token),
       ip_hash: args.ipHash,
     })
@@ -56,6 +56,33 @@ export async function criarLivro(
     return null;
   }
   return { id: (data as { id: string }).id, token };
+}
+
+export interface Manuscrito {
+  formato: string | null;
+  blocos: Bloco[] | null;
+  candidatos: { lista: Candidato[]; abertura: number } | null;
+}
+
+export async function lerManuscrito(admin: SupabaseClient, id: string): Promise<Manuscrito | null> {
+  const { data, error } = await admin.from("livros").select("formato, blocos, candidatos").eq("id", id).maybeSingle();
+  if (error) console.error("[livros] ler manuscrito:", error.message);
+  return (data as Manuscrito | null) ?? null;
+}
+
+export async function gravarManuscrito(admin: SupabaseClient, id: string, blocos: Bloco[], lista: Candidato[], abertura: number): Promise<boolean> {
+  const { error } = await admin.from("livros").update({ blocos, candidatos: { lista, abertura } }).eq("id", id);
+  if (error) console.error("[livros] gravar manuscrito:", error.message);
+  return !error;
+}
+
+export async function gravarCapitulos(admin: SupabaseClient, id: string, capitulos: CapituloTexto[], cortado: boolean): Promise<boolean> {
+  const { error } = await admin
+    .from("livros")
+    .update({ capitulos, cortado, texto_hash: md5(textoDoLivro(capitulos)), capitulos_aprovados_em: new Date().toISOString() })
+    .eq("id", id);
+  if (error) console.error("[livros] gravar capítulos:", error.message);
+  return !error;
 }
 
 export async function lerLivro(admin: SupabaseClient, id: string): Promise<LivroRegistro | null> {

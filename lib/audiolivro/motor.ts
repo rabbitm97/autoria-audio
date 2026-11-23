@@ -75,10 +75,11 @@ export interface LivroParaAudio {
   creditos: { inicio: string; fim: string };
 }
 
+/** Livro com os capítulos aprovados → o que o motor narra. */
 export function livroParaAudio(livro: LivroRegistro): LivroParaAudio {
   return {
-    capitulos: livro.capitulos,
-    textoHash: livro.texto_hash,
+    capitulos: livro.capitulos ?? [],
+    textoHash: livro.texto_hash ?? "",
     creditos: textoCreditos(livro.titulo, livro.subtitulo ?? "", livro.autor),
   };
 }

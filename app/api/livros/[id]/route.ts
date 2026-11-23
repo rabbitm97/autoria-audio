@@ -18,6 +18,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const livro = await lerLivro(admin, id);
   if (!livro) return erro(404, "Livro não encontrado.");
   const dono = await tokenConfere(admin, id, req);
+  const base = {
+    id: livro.id,
+    titulo: livro.titulo,
+    subtitulo: livro.subtitulo,
+    autor: livro.autor,
+    cortado: livro.cortado,
+    exemplo: livro.exemplo,
+  };
+  // Capítulos ainda não aprovados: a tela mostra a aprovação (só para quem enviou).
+  if (!livro.capitulos) return NextResponse.json({ livro: base, dono, etapa: "capitulos" });
+
   const paraAudio = livroParaAudio(livro);
   const previa = previaDoLivro(paraAudio);
   const dados = livro.dados;
@@ -26,14 +37,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const nomes = dados ? nomesDosCapitulos(dados) : new Map<number, string>();
 
   return NextResponse.json({
-    livro: {
-      id: livro.id,
-      titulo: livro.titulo,
-      subtitulo: livro.subtitulo,
-      autor: livro.autor,
-      cortado: livro.cortado,
-      exemplo: livro.exemplo,
-    },
+    livro: base,
+    etapa: "narracao",
     dono,
     limite_caracteres: LIMITE_CARACTERES,
     previa,

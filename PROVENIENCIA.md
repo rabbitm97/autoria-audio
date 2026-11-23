@@ -19,6 +19,7 @@ Os módulos de áudio em `lib/audiolivro/`, a tela do audiolivro e a rota que a 
 | `lib/audiolivro/pronuncia-ia.ts` | motor Autoria, adaptado: chama a API da Anthropic direto, com a chave da demonstração |
 | `app/livro/[id]/tela-audiolivro.tsx` | tela do audiolivro da Autoria, adaptada: sem plano, cobrança nem conclusão; a narração anda com a página aberta; limites e avisos da demonstração; quem só tem o link ouve |
 | `app/api/audiolivro/[id]/route.ts` | rota do audiolivro da Autoria, adaptada: acesso por token do livro em vez de conta; limites e aviso de créditos da demonstração |
+| `public/logo-autoria.png`, `app/favicon.ico`, `app/icon.png`, `app/apple-icon.png`, `app/opengraph-image.png`, `app/twitter-image.png` | marca Autoria (logotipo e monograma do autor), redesenhados para ícone e imagem de compartilhamento |
 | esqueleto Next.js | gerado com `create-next-app` (código aberto) |
 | todo o resto | escrito neste repositório |
 

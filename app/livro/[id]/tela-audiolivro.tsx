@@ -86,7 +86,9 @@ const AVISO_TEXTO: Record<string, string> = {
 };
 
 function duracaoEstimada(caracteres: number): string {
-  const min = Math.max(1, Math.round(caracteres / AUDIO_CARACTERES_POR_SEGUNDO / 60));
+  const seg = caracteres / AUDIO_CARACTERES_POR_SEGUNDO;
+  if (seg < 45) return "menos de 1 min";
+  const min = Math.max(1, Math.round(seg / 60));
   if (min < 60) return `cerca de ${min} min`;
   const h = Math.floor(min / 60);
   const m = min % 60;
@@ -375,7 +377,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
       <div className="mx-auto max-w-3xl px-5 py-10">
         {dono && <div className="mb-6"><Etapas atual={3} /></div>}
         <div className="mb-8">
-          <p className="text-sm font-medium text-latao mb-1">Audiolivro</p>
+          <p className="text-sm font-medium text-ouro mb-1">Audiolivro</p>
           <h1 className="font-serif text-3xl text-tinta">{info?.livro.titulo ?? "Seu livro narrado"}</h1>
           {info?.livro.autor && <p className="mt-1 text-tinta-suave">{info.livro.autor}</p>}
           <p className="text-tinta-suave mt-2 text-sm leading-relaxed max-w-2xl">
@@ -743,11 +745,11 @@ function ItemTrecho({
         <span className="font-medium text-tinta">
           {comCapitulo ? `${nomeCapitulo(t.capitulo_titulo)} · ` : ""}Trecho {t.ordem + 1}:
         </span>{" "}
-        {t.inicio}...
+        {t.inicio.length >= 160 ? `${t.inicio.replace(/[\s.,;:!?…]+$/, "")}…` : t.inicio}
         {t.editado && <span className="ml-2 rounded border border-latao/40 px-1.5 py-0.5 text-[10px] text-tinta">fala editada</span>}
       </p>
       {(t.avisos.length > 0 || falhou) && (
-        <p className="text-xs text-latao mt-1">
+        <p className="text-xs text-ouro mt-1">
           {falhou ? "não foi possível gerar este trecho" : t.avisos.map((a) => AVISO_TEXTO[a] ?? a).join("; ")}
         </p>
       )}
@@ -880,7 +882,7 @@ function EditorPronuncias({
         ))}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-4">
-        <button onClick={() => setPronuncias([...pronuncias, { grafia: "", fala: "" }])} className="text-xs text-latao underline">
+        <button onClick={() => setPronuncias([...pronuncias, { grafia: "", fala: "" }])} className="text-xs text-ouro underline">
           + adicionar nome
         </button>
         {onSugerir && (
@@ -905,7 +907,7 @@ function EditorPronuncias({
                     <span className="text-tinta">{s.grafia}</span>
                     <span className="text-tinta-suave">→</span>
                     <span className="text-tinta">{s.fala}</span>
-                    <button onClick={() => adicionar([s])} className="ml-auto text-xs text-latao underline">adicionar</button>
+                    <button onClick={() => adicionar([s])} className="ml-auto text-xs text-ouro underline">adicionar</button>
                   </li>
                 ))}
               </ul>

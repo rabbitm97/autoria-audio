@@ -9,7 +9,7 @@ export default function Etapas({ atual }: { atual: number }) {
         <li key={nome} className="flex items-center gap-2" aria-current={i === atual ? "step" : undefined}>
           <span
             className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-              i < atual ? "bg-tinta text-folha" : i === atual ? "bg-latao text-folha" : "border border-linha text-tinta-suave"
+              i < atual ? "bg-tinta text-folha" : i === atual ? "bg-latao text-tinta" : "border border-linha text-tinta-suave"
             }`}
           >
             {i + 1}

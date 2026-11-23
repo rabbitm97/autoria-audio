@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
-/* Estúdio: papel frio, tinta verde-escura e a lâmpada de "gravando" em latão. */
+/* Identidade da Autoria: papel creme, tinta azul-marinho e dourado. */
 :root {
-  --papel: #f3f5f4;
-  --folha: #ffffff;
-  --tinta: #16302b;
-  --tinta-suave: #4e625c;
-  --linha: #c9d3cf;
-  --latao: #c98f12;
-  --latao-claro: #f4dfa8;
+  --papel: #faf6ef;
+  --folha: #fdfcf9;
+  --tinta: #1a1a2e;
+  --tinta-suave: #5a5b6e;
+  --linha: #e4dccb;
+  --latao: #c9a84c;
+  --latao-claro: #f1e6c4;
+  --ouro: #8a6a1c;
   --erro: #a3341f;
 }
 
@@ -20,6 +21,7 @@
   --color-linha: var(--linha);
   --color-latao: var(--latao);
   --color-latao-claro: var(--latao-claro);
+  --color-ouro: var(--ouro);
   --color-erro: var(--erro);
   --font-sans: var(--fonte-ui);
   --font-serif: var(--fonte-livro);
@@ -32,7 +34,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--latao);
+  outline: 2px solid var(--ouro);
   outline-offset: 2px;
 }
 

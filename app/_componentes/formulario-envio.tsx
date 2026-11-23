@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { guardarToken } from "./token";
 import Etapas from "./etapas";
@@ -23,27 +23,51 @@ function enviarArquivo(url: string, arquivo: File, onProgresso: (p: number) => v
   });
 }
 
+function tamanhoLegivel(bytes: number) {
+  return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Confere formato e tamanho; devolve o problema, ou null. */
+function problemaDoArquivo(f: File): string | null {
+  if (!/\.(docx|pdf|txt)$/i.test(f.name)) return "Formato inválido. Aceitos: .docx, .pdf ou .txt";
+  if (f.size > TAMANHO_MAX) return "Arquivo muito grande. Máximo: 50 MB";
+  return null;
+}
+
+const ITENS_DECLARACAO = [
+  "O texto enviado é de minha autoria, ou tenho autorização de quem detém os direitos para transformá-lo em audiolivro.",
+  "O texto não reproduz obra de terceiros protegida por direito autoral sem permissão (obras em domínio público podem ser usadas).",
+  "Tenho o direito de usar os nomes, marcas e trechos citados no texto.",
+  "Entendo que o arquivo é usado só para gerar a narração, nunca para treinar IA, e é apagado depois da leitura do texto.",
+  "Respondo pelo conteúdo enviado e pelo uso que fizer do áudio gerado.",
+];
+
 export default function Assistente() {
   const router = useRouter();
+  const entrada = useRef<HTMLInputElement>(null);
   const [passo, setPasso] = useState<0 | 1>(0);
   const [titulo, setTitulo] = useState("");
   const [autor, setAutor] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
+  const [erroArquivo, setErroArquivo] = useState<string | null>(null);
   const [declaracao, setDeclaracao] = useState(false);
   const [verDeclaracao, setVerDeclaracao] = useState(false);
-  const [andamento, setAndamento] = useState<string | null>(null);
+  const [andamento, setAndamento] = useState<{ texto: string; pct: number } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
-  const pronto = titulo.trim() && autor.trim() && arquivo && declaracao;
+  const pronto = !!titulo.trim() && !!arquivo && declaracao;
+
+  function escolher(f: File | undefined) {
+    if (!f) return;
+    const p = problemaDoArquivo(f);
+    setErroArquivo(p);
+    setArquivo(p ? null : f);
+  }
 
   async function continuar() {
     if (!pronto || !arquivo) return;
-    if (arquivo.size > TAMANHO_MAX) {
-      setErro("O arquivo precisa ter até 50 MB.");
-      return;
-    }
     setErro(null);
-    setAndamento("Registrando o livro…");
+    setAndamento({ texto: "Registrando o livro…", pct: 5 });
     try {
       const res = await fetch("/api/livros", {
         method: "POST",
@@ -54,22 +78,22 @@ export default function Assistente() {
       if (!res.ok || !json.id) throw new Error(json.error ?? "Não foi possível registrar o livro.");
       guardarToken(json.id, json.token);
 
-      setAndamento("Enviando o manuscrito… 0%");
-      const ok = await enviarArquivo(json.envio, arquivo, (p) => setAndamento(`Enviando o manuscrito… ${Math.round(p * 100)}%`));
+      setAndamento({ texto: "Enviando o manuscrito…", pct: 10 });
+      const ok = await enviarArquivo(json.envio, arquivo, (p) => setAndamento({ texto: "Enviando o manuscrito…", pct: 10 + Math.round(p * 60) }));
       if (!ok) throw new Error("O envio do arquivo falhou. Confira a conexão e tente de novo.");
 
-      setAndamento("Lendo o texto e procurando os capítulos…");
+      setAndamento({ texto: "Lendo o texto do livro…", pct: 75 });
       const res2 = await fetch(`/api/livros/${json.id}/manuscrito`, { method: "POST", headers: { "x-livro-token": json.token } });
       const json2 = await res2.json().catch(() => ({}));
       if (!res2.ok) throw new Error(json2.error ?? "Não foi possível ler o manuscrito.");
+      setAndamento({ texto: "Detectando capítulos…", pct: 90 });
       router.push(`/livro/${json.id}`);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado.");
-      setAndamento(null);
     }
   }
 
-  const campo = "mt-1 w-full rounded-md border border-linha bg-folha px-3 py-2 text-tinta";
+  const campo = "mt-1 w-full rounded-md border border-linha bg-folha px-3 py-2.5 text-sm text-tinta placeholder:text-tinta-suave/70";
 
   if (passo === 0) {
     return (
@@ -91,58 +115,132 @@ export default function Assistente() {
     );
   }
 
+  if (andamento) {
+    return (
+      <section className="mt-8 rounded-lg border border-linha bg-folha p-6">
+        <Etapas atual={1} />
+        <h2 className="mt-6 font-serif text-2xl">{erro ? "Envio interrompido" : "Preparando o livro…"}</h2>
+        {erro ? (
+          <div className="mt-4 space-y-4">
+            <p role="alert" className="rounded-lg border border-erro/30 bg-erro/5 p-4 text-sm text-erro">{erro}</p>
+            <button
+              onClick={() => { setErro(null); setAndamento(null); }}
+              className="w-full rounded-md bg-tinta px-4 py-3 font-medium text-folha hover:bg-tinta/90"
+            >
+              Voltar e tentar de novo
+            </button>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-tinta-suave" aria-live="polite">{andamento.texto}</span>
+              <span className="text-tinta-suave">{andamento.pct}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-linha" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={andamento.pct}>
+              <div className="h-full bg-latao transition-all duration-500" style={{ width: `${andamento.pct}%` }} />
+            </div>
+            <p className="text-center text-xs text-tinta-suave">Isso pode levar alguns minutos. Não feche esta janela.</p>
+          </div>
+        )}
+      </section>
+    );
+  }
+
   return (
     <section className="mt-8 rounded-lg border border-linha bg-folha p-6">
       <Etapas atual={1} />
       <h2 className="mt-6 font-serif text-2xl">Seu manuscrito</h2>
-
-      {andamento ? (
-        <p className="mt-6 text-tinta-suave" aria-live="polite">{andamento}</p>
-      ) : (
-        <div className="mt-4 space-y-5">
-          <div>
-            <label htmlFor="titulo" className="text-sm font-medium">Título do livro</label>
-            <input id="titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} maxLength={120} className={campo} />
-          </div>
-          <div>
-            <label htmlFor="autor" className="text-sm font-medium">Autor ou autora</label>
-            <input id="autor" value={autor} onChange={(e) => setAutor(e.target.value)} maxLength={120} placeholder="Nome como vai na capa" className={campo} />
-          </div>
-          <div>
-            <label htmlFor="arquivo" className="text-sm font-medium">Arquivo do livro</label>
+      <div className="mt-4 space-y-5">
+        <div>
+          <label htmlFor="titulo" className="text-sm font-medium">Título do livro *</label>
+          <input id="titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} maxLength={120} placeholder="O título do seu manuscrito" className={campo} />
+        </div>
+        <div>
+          <label htmlFor="autor" className="text-sm font-medium">Autor (opcional)</label>
+          <input id="autor" value={autor} onChange={(e) => setAutor(e.target.value)} maxLength={120} placeholder="Nome do autor" className={campo} />
+        </div>
+        <div>
+          <p className="text-sm font-medium" id="rotulo-arquivo">Manuscrito *</p>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-labelledby="rotulo-arquivo"
+            onClick={() => entrada.current?.click()}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); entrada.current?.click(); } }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); escolher(e.dataTransfer.files[0]); }}
+            className="mt-1 cursor-pointer rounded-xl border-2 border-dashed border-linha p-6 text-center transition-colors hover:border-latao/60"
+          >
             <input
+              ref={entrada}
               id="arquivo"
               type="file"
               accept=".docx,.pdf,.txt"
-              onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
-              className={`${campo} file:mr-3 file:rounded file:border-0 file:bg-tinta file:px-3 file:py-1 file:text-sm file:text-folha`}
+              className="hidden"
+              onChange={(e) => escolher(e.target.files?.[0])}
             />
-            <p className="mt-1 text-xs text-tinta-suave">.docx, .pdf ou .txt, até 50 MB. No .docx, os estilos de título do Word ajudam a achar os capítulos.</p>
-          </div>
-          <div className="rounded-md border border-linha p-3">
-            <label className="flex items-start gap-3 text-sm">
-              <input type="checkbox" checked={declaracao} onChange={(e) => setDeclaracao(e.target.checked)} className="mt-0.5 accent-[var(--tinta)]" />
-              <span>Declaro que sou titular dos direitos deste texto ou tenho autorização para transformá-lo em audiolivro.</span>
-            </label>
-            <button type="button" onClick={() => setVerDeclaracao(!verDeclaracao)} aria-expanded={verDeclaracao} className="mt-2 text-xs underline">
-              {verDeclaracao ? "Fechar a declaração" : "Ler a declaração"}
-            </button>
-            {verDeclaracao && (
-              <p className="mt-2 text-xs leading-relaxed text-tinta-suave">
-                Ao enviar, você declara que o texto é de sua autoria, que você detém os direitos de adaptação para áudio ou que tem autorização de quem os detém, e que ele não reproduz obra de terceiros sem permissão. O arquivo é usado só para gerar a narração e é apagado depois da leitura do texto.
-              </p>
+            {arquivo ? (
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-tinta">{arquivo.name}</p>
+                <p className="text-xs text-tinta-suave">{tamanhoLegivel(arquivo.size)}</p>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setArquivo(null); if (entrada.current) entrada.current.value = ""; }}
+                  className="mt-1 text-xs text-tinta-suave underline"
+                >
+                  Remover
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-sm text-tinta-suave">Arraste ou clique para selecionar</p>
+                <p className="text-xs text-tinta-suave">.docx, .pdf ou .txt · máx. 50 MB</p>
+              </div>
             )}
           </div>
-          {erro && <p role="alert" className="text-sm text-erro">{erro}</p>}
-          <button
-            onClick={continuar}
-            disabled={!pronto}
-            className="w-full rounded-md bg-tinta px-4 py-3 font-medium text-folha hover:bg-tinta/90 disabled:opacity-50"
-          >
-            Continuar
-          </button>
+          {erroArquivo && <p className="mt-1 text-xs text-erro">{erroArquivo}</p>}
+          <p className="mt-2 text-xs text-ouro">Prefira .docx ou .txt. PDF costuma juntar ou separar parágrafos e confundir a detecção de capítulos.</p>
         </div>
-      )}
+
+        <p className="flex items-start gap-2.5 rounded-xl border border-tinta/15 bg-tinta/[0.04] p-3 text-xs leading-relaxed text-tinta/80">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 shrink-0 text-tinta" aria-hidden>
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span>
+            <strong className="font-semibold text-tinta">Sua obra continua 100% sua.</strong> O manuscrito é usado só para gerar a narração — nunca para treinar IA — e o arquivo é apagado depois da leitura do texto.
+          </span>
+        </p>
+
+        <div className="rounded-xl border border-linha bg-papel/60">
+          <button
+            type="button"
+            onClick={() => setVerDeclaracao(!verDeclaracao)}
+            aria-expanded={verDeclaracao}
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+          >
+            <span className="text-sm font-semibold text-tinta">Declaração de titularidade</span>
+            <span className="text-xs text-tinta-suave">{verDeclaracao ? "Recolher −" : `Ler os ${ITENS_DECLARACAO.length} itens +`}</span>
+          </button>
+          {verDeclaracao && (
+            <ol className="list-decimal space-y-2 border-t border-linha px-4 pb-4 pl-9 pt-3 text-sm leading-relaxed text-tinta">
+              {ITENS_DECLARACAO.map((i) => <li key={i}>{i}</li>)}
+            </ol>
+          )}
+          <label className="flex cursor-pointer items-start gap-3 border-t border-linha px-4 py-3">
+            <input type="checkbox" checked={declaracao} onChange={(e) => setDeclaracao(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--tinta)]" />
+            <span className="text-sm leading-relaxed text-tinta">Li e concordo com a declaração de titularidade acima.</span>
+          </label>
+        </div>
+
+        <button
+          onClick={continuar}
+          disabled={!pronto}
+          className="w-full rounded-md bg-tinta px-4 py-3 font-medium text-folha hover:bg-tinta/90 disabled:opacity-50"
+        >
+          Continuar
+        </button>
+      </div>
     </section>
   );
 }

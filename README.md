@@ -13,14 +13,15 @@ Um audiolivro gravado em estúdio custa caro e leva semanas, e por isso a maior 
 ## Como funciona para o autor
 
 1. **Manuscrito:** título, autor, o arquivo do livro e a declaração de que tem os direitos sobre o texto.
-2. **Capítulos:** a demonstração propõe os capítulos que encontrou (pelos estilos de título do Word, por "Capítulo 1" e semelhantes, ou por títulos em maiúsculas) e diz de onde tirou cada um. O autor marca, desmarca e renomeia.
+2. **Capítulos:** a demonstração propõe os capítulos (pelos estilos de título do Word, por "Capítulo 1" e semelhantes, por seções como "Prólogo", por títulos em maiúsculas ou linhas curtas isoladas), descarta sumário e cabeçalhos repetidos e pede a uma IA que confira os casos duvidosos. O autor marca, desmarca e renomeia, acha pela busca um capítulo que faltou, edita o texto de cada capítulo e da abertura (o que vem antes do 1º capítulo) e decide se a abertura é narrada. Quando apaga um pedaço grande, escolhe se ele vira um capítulo novo, vai para o capítulo anterior ou seguinte, ou sai do livro.
 3. **Narração:** escolhe a voz ouvindo amostras, confere como a voz fala os nomes do livro (com sugestões de pronúncia por IA) e gera. Ao final ouve cada capítulo, vê os trechos que a conferência apontou, gera de novo ou ajusta o texto falado de um trecho, e baixa o ZIP.
 
 Quem recebe o link do livro só ouve. Mudar a narração exige o token guardado no navegador de quem enviou.
 
 ## Como funciona por dentro
 
-- **Leitura** (`lib/adaptadores/manuscrito.ts`): `.docx` pelo mammoth; `.pdf` pelo unpdf, tirando cabeçalho, rodapé e número de página repetidos e emendando palavras hifenizadas; `.txt` por parágrafos.
+- **Leitura** (`lib/adaptadores/manuscrito.ts`): `.docx` pelo mammoth; `.pdf` pelo unpdf, tirando cabeçalho, rodapé e número de página repetidos e emendando palavras hifenizadas; `.txt` como está. O texto fica com um parágrafo por linha.
+- **Capítulos** (`lib/adaptadores/deteccao.ts`, `arbitragem.ts`, `edicao.ts`): proposta por padrões do texto e estilos do Word, conferência por IA (Claude) dos casos duvidosos, busca, edição do texto com as posições dos capítulos acompanhando, e montagem dos capítulos narrados.
 - **Preparação para a fala** (`lib/audiolivro/normalizar.ts`, `numeros.ts`): números, horas, valores, ordinais, algarismos romanos e abreviações por extenso; as pronúncias escolhidas pelo autor são aplicadas aqui.
 - **Divisão em trechos** (`dividir.ts`): por parágrafo, no tamanho que a voz narra bem. Cada trecho tem um hash do texto e da voz: mudar a pronúncia de um nome refaz só os trechos em que ele aparece.
 - **Voz** (`gemini.ts`): Gemini TTS, com uma instrução de estilo fixa para todo o livro.

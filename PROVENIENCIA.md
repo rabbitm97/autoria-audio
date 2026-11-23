@@ -21,6 +21,7 @@ Os módulos de áudio em `lib/audiolivro/`, a tela do audiolivro e a rota que a 
 | `app/api/audiolivro/[id]/route.ts` | rota do audiolivro da Autoria, adaptada: acesso por token do livro em vez de conta; limites e aviso de créditos da demonstração |
 | `public/logo-autoria.png`, `app/favicon.ico`, `app/icon.png`, `app/apple-icon.png`, `app/opengraph-image.png`, `app/twitter-image.png` | marca Autoria (logotipo e monograma do autor), redesenhados para ícone e imagem de compartilhamento |
 | esqueleto Next.js | gerado com `create-next-app` (código aberto) |
+| `lib/adaptadores/deteccao.ts`, `arbitragem.ts`, `edicao.ts`, `app/_componentes/aprovacao-capitulos.tsx`, `app/api/livros/[id]/capitulos/route.ts` | escritos neste repositório; reproduzem o comportamento da conferência de capítulos da Autoria (proposta, conferência por IA, busca, edição do texto e da abertura), sem copiar o código dela |
 | todo o resto | escrito neste repositório |
 
 O histórico de commits desses módulos no repositório de origem está disponível para a Comissão, se solicitado.

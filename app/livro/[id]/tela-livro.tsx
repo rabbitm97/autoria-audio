@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { lerToken } from "@/app/_componentes/token";
 import Etapas from "@/app/_componentes/etapas";
 import AprovacaoCapitulos from "@/app/_componentes/aprovacao-capitulos";
@@ -14,9 +15,13 @@ interface Estado {
   livro: { id: string; titulo: string; subtitulo: string | null; autor: string };
   dono: boolean;
   etapa: "capitulos" | "narracao";
+  narracao_comecou: boolean;
 }
 
 export default function TelaLivro({ id }: { id: string }) {
+  const router = useRouter();
+  // ?capitulos=1: o autor voltou para mudar capítulos ou texto antes de narrar.
+  const voltarAosCapitulos = useSearchParams().get("capitulos") === "1";
   const [estado, setEstado] = useState<Estado | null>(null);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
   // undefined: ainda não leu o token deste navegador; null: não tem.
@@ -55,14 +60,23 @@ export default function TelaLivro({ id }: { id: string }) {
     return <div className="mx-auto max-w-3xl px-5 py-12 text-tinta-suave">Abrindo o livro…</div>;
   }
 
-  if (estado.etapa === "capitulos") {
+  const naEtapaCapitulos =
+    estado.etapa === "capitulos" || (voltarAosCapitulos && estado.dono && !!token && !estado.narracao_comecou);
+  if (naEtapaCapitulos) {
     return (
       <div className="mx-auto max-w-3xl px-5 py-10">
         <Etapas atual={2} />
         <h1 className="mt-6 font-serif text-3xl leading-tight sm:text-4xl">{estado.livro.titulo}</h1>
         <p className="mt-2 text-tinta-suave">{estado.livro.autor}</p>
         {estado.dono && token ? (
-          <AprovacaoCapitulos id={id} token={token} onAprovado={() => void carregar()} />
+          <AprovacaoCapitulos
+            id={id}
+            token={token}
+            onAprovado={() => {
+              if (voltarAosCapitulos) router.replace(`/livro/${id}`);
+              void carregar();
+            }}
+          />
         ) : (
           <p className="mt-6 text-tinta-suave">Este livro ainda está sendo preparado.</p>
         )}

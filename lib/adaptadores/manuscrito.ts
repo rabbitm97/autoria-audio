@@ -1,18 +1,26 @@
 // lib/adaptadores/manuscrito.ts
 //
-// Texto do manuscrito em blocos (títulos e parágrafos), a partir de .docx,
-// .pdf ou .txt. Os blocos são a base da proposta de capítulos e da aprovação.
-//   .docx: mammoth (código aberto) → HTML simples; Título 1/2/3 do Word viram
-//          blocos de título, o resto parágrafos. Imagens são ignoradas.
+// Texto do manuscrito a partir de .docx, .pdf ou .txt, com um parágrafo por
+// linha e uma linha em branco entre parágrafos (o formato em que a proposta
+// de capítulos e o editor de texto trabalham).
+//   .docx: mammoth (código aberto) → HTML simples; cada parágrafo e cada título
+//          vira um parágrafo do texto. Os títulos marcados com estilo no Word
+//          (Título, Título 1, 2, 3…) ficam guardados à parte para orientar a
+//          proposta de capítulos. Imagens são ignoradas.
 //   .pdf:  unpdf (código aberto) → linhas por página; cabeçalho, rodapé e
 //          número de página repetidos saem; linhas viram parágrafos e a palavra
 //          hifenizada no fim da linha é emendada.
-//   .txt:  parágrafos separados por linha em branco (ou uma linha por
-//          parágrafo, quando o arquivo não tem linhas em branco).
+//   .txt:  o texto como está no arquivo.
 
 import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
-import type { Bloco } from "./tipos";
+import type { TituloWord } from "./tipos";
+
+interface Bloco {
+  /** "p" = parágrafo; "titulo" = estilo Título; 1-6 = Título N. */
+  t: "p" | "titulo" | number;
+  x: string;
+}
 
 export type FormatoManuscrito = "docx" | "pdf" | "txt";
 
@@ -45,14 +53,20 @@ function textoDoHtml(html: string): string {
 async function blocosDoDocx(buffer: Buffer): Promise<Bloco[]> {
   const { value } = await mammoth.convertToHtml(
     { buffer },
-    { convertImage: mammoth.images.imgElement(async () => ({ src: "" })) },
+    {
+      // O estilo Título (nome do livro) sai com classe própria.
+      styleMap: ["p[style-name='Title'] => h1.titulo-do-livro:fresh", "p[style-name='Título'] => h1.titulo-do-livro:fresh"],
+      convertImage: mammoth.images.imgElement(async () => ({ src: "" })),
+    },
   );
   const r: Bloco[] = [];
-  for (const m of value.matchAll(/<(h[1-6]|p)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi)) {
+  for (const m of value.matchAll(/<(h[1-6]|p)(\s[^>]*)?>([\s\S]*?)<\/\1>/gi)) {
     const tag = m[1].toLowerCase();
-    const x = textoDoHtml(m[2]);
+    const x = textoDoHtml(m[3]);
     if (!x) continue;
-    r.push({ t: tag === "p" ? "p" : tag === "h1" ? "h1" : tag === "h2" ? "h2" : "h3", x });
+    if (tag === "p") r.push({ t: "p", x });
+    else if (/titulo-do-livro/.test(m[2] ?? "")) r.push({ t: "titulo", x });
+    else r.push({ t: Number(tag[1]), x });
   }
   return r;
 }
@@ -67,11 +81,8 @@ function decodificar(bytes: Uint8Array): string {
   }
 }
 
-function blocosDoTxt(bytes: Uint8Array): Bloco[] {
-  const texto = decodificar(bytes).replace(/^﻿/, "").replace(/\r\n?/g, "\n");
-  const temLinhaEmBranco = /\n[ \t]*\n/.test(texto);
-  const partes = temLinhaEmBranco ? texto.split(/\n[ \t]*\n+/).map((p) => p.replace(/\n/g, " ")) : texto.split("\n");
-  return partes.map(espacos).filter(Boolean).map((x) => ({ t: "p" as const, x }));
+function textoDoTxt(bytes: Uint8Array): string {
+  return decodificar(bytes).replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").trim();
 }
 
 // ─── .pdf ───────────────────────────────────────────────────────────────────
@@ -144,8 +155,16 @@ async function blocosDoPdf(bytes: Uint8Array): Promise<Bloco[]> {
 
 // ─── Entrada ────────────────────────────────────────────────────────────────
 
-export async function blocosDoManuscrito(bytes: Uint8Array, formato: FormatoManuscrito): Promise<Bloco[]> {
-  if (formato === "docx") return blocosDoDocx(Buffer.from(bytes));
-  if (formato === "pdf") return blocosDoPdf(bytes);
-  return blocosDoTxt(bytes);
+export interface TextoDoManuscrito {
+  texto: string;
+  titulosWord: TituloWord[];
+}
+
+export async function lerArquivoDoManuscrito(bytes: Uint8Array, formato: FormatoManuscrito): Promise<TextoDoManuscrito> {
+  if (formato === "txt") return { texto: textoDoTxt(bytes), titulosWord: [] };
+  const blocos = formato === "docx" ? await blocosDoDocx(Buffer.from(bytes)) : await blocosDoPdf(bytes);
+  return {
+    texto: blocos.map((b) => b.x).join("\n\n"),
+    titulosWord: blocos.filter((b) => b.t !== "p").map((b) => ({ texto: b.x, nivel: b.t as TituloWord["nivel"] })),
+  };
 }

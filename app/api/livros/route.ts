@@ -1,4 +1,4 @@
-// POST /api/livros — { titulo, subtitulo?, autor, declaracao, arquivo: { nome, tamanho } }
+// POST /api/livros — { titulo, subtitulo?, autor?, declaracao, arquivo: { nome, tamanho } }
 // Cria o livro e devolve o id, o token de quem enviou (guardado no navegador)
 // e um link para enviar o arquivo direto ao armazenamento (até 50 MB). Em
 // seguida a tela chama /api/livros/[id]/manuscrito para ler o texto.
@@ -27,7 +27,6 @@ export async function POST(req: NextRequest) {
   const formato = formatoDoNome(nome);
 
   if (!titulo) return erro(400, "Informe o título do livro.");
-  if (!autor) return erro(400, "Informe o nome de quem escreveu.");
   if (body.declaracao !== true) return erro(400, "Aceite a declaração de titularidade para continuar.");
   if (!formato) return erro(400, "Envie o manuscrito em .docx, .pdf ou .txt.");
   if (tamanho <= 0 || tamanho > TAMANHO_MAX_MANUSCRITO) return erro(400, "O arquivo precisa ter até 50 MB.");

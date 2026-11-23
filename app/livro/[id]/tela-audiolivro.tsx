@@ -8,6 +8,7 @@
 // o link ouve; quem enviou o livro (token) configura e ajusta.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import Etapas from "@/app/_componentes/etapas";
 import { AUDIO_CARACTERES_POR_SEGUNDO, AUDIO_VOZES, type VozAudio } from "@/lib/audiolivro/config";
 import { nomesDosArquivos } from "@/lib/audiolivro/nomes";
@@ -507,7 +508,10 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-tinta-suave mt-3">Os capítulos são os que você aprovou ao enviar o livro, com os créditos de abertura e de encerramento.</p>
+              <p className="text-xs text-tinta-suave mt-3">
+                Os capítulos são os que você aprovou ao enviar o livro, com os créditos de abertura e de encerramento.{" "}
+                <Link href={`/livro/${id}?capitulos=1`} className="underline hover:text-tinta">Mudar capítulos ou editar o texto</Link>
+              </p>
             </section>
 
             <section className="bg-folha rounded-2xl border border-linha p-6">

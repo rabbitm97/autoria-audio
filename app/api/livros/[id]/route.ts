@@ -17,5 +17,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     dono: await tokenConfere(admin, id, req),
     // Capítulos ainda não aprovados: a tela mostra a aprovação (só para quem enviou).
     etapa: livro.capitulos ? "narracao" : "capitulos",
+    narracao_comecou: !!livro.dados,
   });
 }

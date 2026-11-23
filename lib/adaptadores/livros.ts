@@ -8,7 +8,8 @@
 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Bloco, Candidato, CapituloTexto, DadosAudio, LivroRegistro } from "./tipos";
+import type { CandidatoCapitulo, CapituloAprovado, CapituloTexto, DadosAudio, LivroRegistro, TituloWord } from "./tipos";
+import type { EstadoArbitragem } from "./arbitragem";
 
 const COLUNAS = "id, titulo, subtitulo, autor, capitulos, texto_hash, cortado, dados, exemplo, criado_em";
 
@@ -58,30 +59,113 @@ export async function criarLivro(
   return { id: (data as { id: string }).id, token };
 }
 
+/** Proposta de capítulos guardada para o texto de um hash (evita refazer a IA). */
+export interface PropostaGuardada {
+  hash: string;
+  candidatos: CandidatoCapitulo[];
+  arbitragem: EstadoArbitragem;
+  truncado: boolean;
+}
+
 export interface Manuscrito {
   formato: string | null;
-  blocos: Bloco[] | null;
-  candidatos: { lista: Candidato[]; abertura: number } | null;
+  texto: string | null;
+  titulos_word: TituloWord[] | null;
+  capitulos_aprovados: CapituloAprovado[] | null;
+  capitulos_aprovados_hash: string | null;
+  incluir_abertura: boolean;
+  proposta: PropostaGuardada | null;
 }
+
+type LinhaManuscrito = Omit<Manuscrito, "proposta" | "texto" | "titulos_word"> & {
+  texto: string | null;
+  titulos_word: TituloWord[] | null;
+  candidatos: unknown;
+  blocos: { t: string; x: string }[] | null;
+};
 
 export async function lerManuscrito(admin: SupabaseClient, id: string): Promise<Manuscrito | null> {
-  const { data, error } = await admin.from("livros").select("formato, blocos, candidatos").eq("id", id).maybeSingle();
+  if (!UUID.test(id)) return null;
+  const { data, error } = await admin
+    .from("livros")
+    .select("formato, texto, titulos_word, capitulos_aprovados, capitulos_aprovados_hash, incluir_abertura, candidatos, blocos")
+    .eq("id", id)
+    .maybeSingle();
   if (error) console.error("[livros] ler manuscrito:", error.message);
-  return (data as Manuscrito | null) ?? null;
+  const l = data as LinhaManuscrito | null;
+  if (!l) return null;
+  // Livros lidos antes do texto editável: o texto vem dos blocos antigos.
+  let texto = l.texto;
+  let titulos = l.titulos_word;
+  if (texto === null && Array.isArray(l.blocos)) {
+    texto = l.blocos.map((b) => b.x).join("\n\n");
+    titulos = l.blocos.filter((b) => b.t !== "p").map((b) => ({ texto: b.x, nivel: Number(b.t.slice(1)) || 1 }));
+  }
+  const c = l.candidatos as Partial<PropostaGuardada> | null;
+  const proposta = c && typeof c.hash === "string" && Array.isArray(c.candidatos) ? (c as PropostaGuardada) : null;
+  return {
+    formato: l.formato, texto, titulos_word: titulos ?? [], capitulos_aprovados: l.capitulos_aprovados,
+    capitulos_aprovados_hash: l.capitulos_aprovados_hash, incluir_abertura: l.incluir_abertura !== false, proposta,
+  };
 }
 
-export async function gravarManuscrito(admin: SupabaseClient, id: string, blocos: Bloco[], lista: Candidato[], abertura: number): Promise<boolean> {
-  const { error } = await admin.from("livros").update({ blocos, candidatos: { lista, abertura } }).eq("id", id);
-  if (error) console.error("[livros] gravar manuscrito:", error.message);
+/** Texto lido do arquivo (a proposta e as decisões antigas deixam de valer). */
+export async function gravarTextoLido(admin: SupabaseClient, id: string, texto: string, titulosWord: TituloWord[]): Promise<boolean> {
+  const { error } = await admin
+    .from("livros")
+    .update({ texto, titulos_word: titulosWord, candidatos: null, capitulos_aprovados: null, capitulos_aprovados_hash: null })
+    .eq("id", id);
+  if (error) console.error("[livros] gravar texto lido:", error.message);
   return !error;
 }
 
-export async function gravarCapitulos(admin: SupabaseClient, id: string, capitulos: CapituloTexto[], cortado: boolean): Promise<boolean> {
+export async function gravarProposta(admin: SupabaseClient, id: string, proposta: PropostaGuardada): Promise<void> {
+  const { error } = await admin.from("livros").update({ candidatos: proposta }).eq("id", id);
+  if (error) console.error("[livros] gravar proposta:", error.message);
+}
+
+/** Texto editado pelo autor e as posições dos capítulos decididos, juntos. */
+export async function gravarTextoEditado(
+  admin: SupabaseClient, id: string, texto: string, aprovados: CapituloAprovado[] | null,
+): Promise<boolean> {
   const { error } = await admin
     .from("livros")
-    .update({ capitulos, cortado, texto_hash: md5(textoDoLivro(capitulos)), capitulos_aprovados_em: new Date().toISOString() })
+    .update({
+      texto,
+      capitulos_aprovados: aprovados && aprovados.length ? aprovados : null,
+      capitulos_aprovados_hash: aprovados && aprovados.length ? md5(texto) : null,
+    })
     .eq("id", id);
-  if (error) console.error("[livros] gravar capítulos:", error.message);
+  if (error) console.error("[livros] gravar texto editado:", error.message);
+  return !error;
+}
+
+export async function apagarDecisoes(admin: SupabaseClient, id: string): Promise<boolean> {
+  const { error } = await admin.from("livros").update({ capitulos_aprovados: null, capitulos_aprovados_hash: null }).eq("id", id);
+  if (error) console.error("[livros] apagar decisões:", error.message);
+  return !error;
+}
+
+/** Aprovação: decisões do autor e os capítulos que vão ser narrados. */
+export async function gravarAprovacao(
+  admin: SupabaseClient,
+  id: string,
+  args: { texto: string; aprovados: CapituloAprovado[]; incluirAbertura: boolean; capitulos: CapituloTexto[]; cortado: boolean },
+): Promise<boolean> {
+  const { error } = await admin
+    .from("livros")
+    .update({
+      texto: args.texto,
+      capitulos_aprovados: args.aprovados,
+      capitulos_aprovados_hash: md5(args.texto),
+      incluir_abertura: args.incluirAbertura,
+      capitulos: args.capitulos,
+      cortado: args.cortado,
+      texto_hash: md5(textoDoLivro(args.capitulos)),
+      capitulos_aprovados_em: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) console.error("[livros] gravar aprovação:", error.message);
   return !error;
 }
 

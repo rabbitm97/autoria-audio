@@ -1,13 +1,13 @@
 // POST /api/livros/[id]/manuscrito — lê o arquivo enviado (.docx, .pdf ou
-// .txt), separa em blocos, propõe os capítulos e apaga o arquivo. Só quem
-// enviou (token).
+// .txt), guarda o texto (um parágrafo por linha) e os títulos do Word, e
+// apaga o arquivo. A proposta de capítulos sai em GET /capitulos.
+// Só quem enviou (token).
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { BUCKET_MANUSCRITOS, supabaseAdmin } from "@/lib/adaptadores/supabase";
-import { gravarManuscrito, lerLivro, lerManuscrito, tokenConfere } from "@/lib/adaptadores/livros";
-import { blocosDoManuscrito, type FormatoManuscrito } from "@/lib/adaptadores/manuscrito";
-import { proporCandidatos } from "@/lib/adaptadores/capitulos";
+import { gravarTextoLido, lerLivro, lerManuscrito, tokenConfere } from "@/lib/adaptadores/livros";
+import { lerArquivoDoManuscrito, type FormatoManuscrito } from "@/lib/adaptadores/manuscrito";
 import { erro } from "@/lib/api/respostas";
 
 export const maxDuration = 120;
@@ -25,19 +25,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { data: arquivo, error } = await admin.storage.from(BUCKET_MANUSCRITOS).download(caminho);
   if (error || !arquivo) return erro(404, "O arquivo não chegou. Envie de novo.");
 
-  let blocos;
+  let lido;
   try {
-    blocos = await blocosDoManuscrito(new Uint8Array(await arquivo.arrayBuffer()), manuscrito.formato as FormatoManuscrito);
+    lido = await lerArquivoDoManuscrito(new Uint8Array(await arquivo.arrayBuffer()), manuscrito.formato as FormatoManuscrito);
   } catch (e) {
     console.error("[manuscrito] leitura:", e instanceof Error ? e.message : e);
-    return erro(422, "Não foi possível ler este arquivo. Confira se ele abre normalmente e tente de novo.");
+    return erro(422, "Falha ao extrair o texto do arquivo. Confira se ele abre normalmente e tente de novo.");
   }
   await admin.storage.from(BUCKET_MANUSCRITOS).remove([caminho]);
-  if (!blocos.some((b) => b.t === "p")) {
-    return erro(422, "Não encontrei texto neste arquivo. Se for um PDF escaneado (imagem), envie o .docx.");
+  if (lido.texto.trim().length < 50) {
+    return erro(422, "O arquivo parece estar vazio ou sem texto extraível. Se for um PDF escaneado (imagem), envie o .docx.");
   }
-
-  const { candidatos, abertura } = proporCandidatos(blocos, livro.titulo);
-  if (!(await gravarManuscrito(admin, id, blocos, candidatos, abertura))) return erro(500, "Falha ao guardar o texto.");
-  return NextResponse.json({ ok: true, candidatos, abertura });
+  if (!(await gravarTextoLido(admin, id, lido.texto, lido.titulosWord))) return erro(500, "Falha ao guardar o texto.");
+  return NextResponse.json({ ok: true, caracteres: lido.texto.length });
 }

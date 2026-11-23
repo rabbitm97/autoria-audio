@@ -18,6 +18,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  AUDIO_AMOSTRAS_NOMES_MAX,
   AUDIO_CARACTERES_POR_SEGUNDO,
   AUDIO_CONCORRENCIA,
   AUDIO_DURACAO_FOLGA_MS,
@@ -38,6 +39,7 @@ import { analisar, aparar, masterizar, nivelar, reamostrar, silencio, wavDePcm, 
 import { codificarMp3, duracaoMp3Ms, juntarBytes } from "./mp3";
 import { ErroTts, sintetizar, transcrever } from "./gemini";
 import { conferirTranscricao } from "./conferir";
+import { fraseComNome } from "./candidatos";
 import {
   CREDITOS_FINAIS,
   CREDITOS_INICIAIS,
@@ -50,6 +52,7 @@ import {
 import { BUCKET } from "@/lib/adaptadores/supabase";
 import { gravarDados, lerDados, md5 } from "@/lib/adaptadores/livros";
 import { LIMITE_REGENERACOES } from "@/lib/adaptadores/limites";
+import { creditosEsgotados, marcarSemCreditos } from "@/lib/adaptadores/avisos";
 import type { CapituloAudio, CapituloTexto, DadosAudio, LivroRegistro, Pronuncia } from "@/lib/adaptadores/tipos";
 
 const TABELA = "trechos";
@@ -167,12 +170,30 @@ interface TrechoExistente {
   texto_fala_original: string | null;
 }
 
+/** O que uma preparação vai usar, mostrado ao autor para confirmar. */
+export interface UsoPreparacao {
+  regeneracoes: number;
+}
+
 export async function prepararAudiolivro(
   admin: SupabaseClient,
-  args: { livroId: string; livro: LivroParaAudio; voz: unknown; pronuncias: unknown; atual: DadosAudio | null },
-): Promise<{ ok: true; dados: DadosAudio; refazer: number } | Falha> {
+  args: {
+    livroId: string;
+    livro: LivroParaAudio;
+    voz: unknown;
+    pronuncias: unknown;
+    atual: DadosAudio | null;
+    /** O uso que o autor viu e confirmou (devolvido no 409). */
+    confirmar?: unknown;
+    /** Etapa obrigatória de nomes e pronúncia feita (1ª narração). */
+    nomesConferidos?: unknown;
+  },
+): Promise<{ ok: true; dados: DadosAudio; refazer: number; edicoesDescartadas: number } | Falha> {
   const { livroId, livro, atual } = args;
   if (!isVozAudio(args.voz)) return { ok: false, status: 400, corpo: { error: "Voz inválida." } };
+  if (!atual && args.nomesConferidos !== true) {
+    return { ok: false, status: 400, corpo: { error: "Confira os nomes e a pronúncia antes de gerar.", reason: "nomes_nao_conferidos" } };
+  }
   const voz = args.voz;
   const pronuncias = limparPronuncias(args.pronuncias);
 
@@ -182,16 +203,23 @@ export async function prepararAudiolivro(
 
   const { data: existentesRaw, error: errLeitura } = await admin
     .from(TABELA)
-    .select("id, capitulo, ordem, hash, storage_path, texto_fala, texto_fala_original")
+    .select("id, capitulo, ordem, hash, estado, storage_path, texto_fala, texto_fala_original")
     .eq("livro_id", livroId);
   if (errLeitura) return { ok: false, status: 500, corpo: { error: "Falha ao ler os trechos." } };
-  const existentes = (existentesRaw ?? []) as TrechoExistente[];
+  const existentes = (existentesRaw ?? []) as (TrechoExistente & { estado: string })[];
+
+  if (atual && atual.voz !== voz && existentes.some((t) => t.estado === "pronto")) {
+    return { ok: false, status: 409, corpo: { error: "A voz não pode mudar depois que a narração começou.", reason: "voz_travada" } };
+  }
 
   const porChave = new Map(existentes.map((t) => [`${t.capitulo}:${t.ordem}`, t]));
   const agora = new Date().toISOString();
   const gravar: Record<string, unknown>[] = [];
   const arquivosVelhos: string[] = [];
   const capitulosMudados = new Set<number>();
+  // Trecho já narrado cujo texto falado mudou (pronúncia) gasta 1 regeneração.
+  let refazerNarrados = 0;
+  let edicoesDescartadas = 0;
 
   for (const p of plano) {
     const ex = porChave.get(`${p.capitulo}:${p.ordem}`);
@@ -201,12 +229,17 @@ export async function prepararAudiolivro(
     let textoFala = p.texto_fala;
     let hash = p.hash;
     let original: string | null = null;
-    if (ex?.texto_fala_original && ex.texto_fala_original === p.texto_fala) {
-      textoFala = ex.texto_fala;
-      hash = hashDoTrecho(voz, textoFala);
-      original = ex.texto_fala_original;
+    if (ex?.texto_fala_original) {
+      if (ex.texto_fala_original === p.texto_fala) {
+        textoFala = ex.texto_fala;
+        hash = hashDoTrecho(voz, textoFala);
+        original = ex.texto_fala_original;
+      } else {
+        edicoesDescartadas++;
+      }
     }
     if (ex && ex.hash === hash) continue;
+    if (ex?.estado === "pronto" && ex.texto_fala !== textoFala) refazerNarrados++;
     capitulosMudados.add(p.capitulo);
     if (ex?.storage_path) arquivosVelhos.push(ex.storage_path);
     gravar.push({
@@ -233,6 +266,30 @@ export async function prepararAudiolivro(
   for (const s of sobras) {
     capitulosMudados.add(s.capitulo);
     if (s.storage_path) arquivosVelhos.push(s.storage_path);
+  }
+
+  // Antes de gravar: confere a cota e pede a confirmação do autor (409 com o uso).
+  const restantes = Math.max(0, LIMITE_REGENERACOES - (atual?.regeneracoes_usadas ?? 0));
+  if (refazerNarrados > restantes) {
+    return {
+      ok: false,
+      status: 402,
+      corpo: {
+        error: `Esta mudança refaz ${refazerNarrados} trechos já narrados e restam ${restantes} regenerações neste livro.`,
+        reason: "sem_regeneracoes",
+        regeneracoes: refazerNarrados,
+        restantes,
+      },
+    };
+  }
+  const uso: UsoPreparacao = { regeneracoes: refazerNarrados };
+  const confirmado = (args.confirmar as UsoPreparacao | undefined)?.regeneracoes === uso.regeneracoes;
+  if (uso.regeneracoes > 0 && !confirmado) {
+    return {
+      ok: false,
+      status: 409,
+      corpo: { error: "Confirme o que esta ação vai usar.", reason: "confirmar", uso, regeneracoes_restantes: restantes, edicoes_descartadas: edicoesDescartadas },
+    };
   }
 
   for (let i = 0; i < gravar.length; i += 200) {
@@ -271,14 +328,14 @@ export async function prepararAudiolivro(
     pronuncias,
     texto_hash: livro.textoHash,
     caracteres,
-    regeneracoes_usadas: atual?.regeneracoes_usadas ?? 0,
+    regeneracoes_usadas: (atual?.regeneracoes_usadas ?? 0) + refazerNarrados,
     capitulos,
     preparado_em: agora,
   };
   if (!(await gravarDados(admin, livroId, dados, { preparado_em: agora }))) {
     return { ok: false, status: 500, corpo: { error: "Falha ao registrar o audiolivro." } };
   }
-  return { ok: true, dados, refazer: gravar.length };
+  return { ok: true, dados, refazer: gravar.length, edicoesDescartadas };
 }
 
 // ─── Processamento ──────────────────────────────────────────────────────────
@@ -492,6 +549,11 @@ export async function processarLote(
   const dados = await lerDados(admin, livroId);
   if (!dados) return { ok: false, status: 409, corpo: { error: "Escolha a voz e comece a narração antes.", reason: "nao_preparado" } };
 
+  // Créditos de voz da demonstração esgotados: pausa sem chamar o serviço.
+  if (await creditosEsgotados(admin)) {
+    return { ok: true, status: await statusAudiolivro(admin, livroId, dados), aguardar_ms: 0, limite_diario: true };
+  }
+
   const { data: reservados, error } = await admin.rpc("reservar_trechos", {
     p_livro_id: livroId,
     p_limite: AUDIO_CONCORRENCIA,
@@ -508,11 +570,13 @@ export async function processarLote(
 
   const fresco = await lerDados(admin, livroId);
   const status = await statusAudiolivro(admin, livroId, fresco);
+  const limiteDiario = desfechos.includes("limite_diario");
+  if (limiteDiario) await marcarSemCreditos(admin, "limite do dia ou orçamento do serviço de voz");
   return {
     ok: true,
     status,
     aguardar_ms: desfechos.includes("limite") ? 20_000 : 0,
-    limite_diario: desfechos.includes("limite_diario"),
+    limite_diario: limiteDiario,
   };
 }
 
@@ -792,4 +856,66 @@ export async function amostraDaVoz(admin: SupabaseClient, vozPedida: unknown): P
     }
   }
   return { ok: false, status: 502, corpo: { error: "Não foi possível preparar a amostra agora. Tente de novo em instantes." } };
+}
+
+// ─── Amostra de um nome (etapa de pronúncia) ───────────────────────────────
+
+/**
+ * A voz escolhida fala a frase do livro em que o nome aparece, já com a
+ * pronúncia que o autor escreveu. Guardada na pasta do livro e limitada a
+ * AUDIO_AMOSTRAS_NOMES_MAX por livro; a mesma voz + frase não é gerada duas vezes.
+ */
+export async function amostraDoNome(
+  admin: SupabaseClient,
+  livro: LivroParaAudio,
+  livroId: string,
+  vozPedida: unknown,
+  grafiaPedida: unknown,
+  falaPedida: unknown,
+): Promise<{ ok: true; url: string; frase: string } | Falha> {
+  if (!isVozAudio(vozPedida)) return { ok: false, status: 400, corpo: { error: "Escolha a voz antes de ouvir os nomes." } };
+  const grafia = typeof grafiaPedida === "string" ? grafiaPedida.trim().slice(0, 80) : "";
+  const fala = typeof falaPedida === "string" ? falaPedida.trim().slice(0, 80) : "";
+  if (!grafia) return { ok: false, status: 400, corpo: { error: "Escreva o nome como está no livro." } };
+  const frase = fraseComNome(segmentosDoLivro(livro).map((s) => s.texto), grafia) ?? `O nome ${grafia} aparece neste livro.`;
+  const textoFala = normalizarParaFala(frase, fala ? [{ grafia, fala }] : []);
+  const pasta = `${livroId}/amostras-nomes`;
+  const arquivo = `${md5(`${AUDIO_VERSAO_MOTOR}|${AUDIO_ESTILO_VERSAO}|${vozPedida}|${textoFala}`).slice(0, 16)}.mp3`;
+  const caminho = `${pasta}/${arquivo}`;
+  const assinar = async (): Promise<string | null> => {
+    const { data } = await admin.storage.from(BUCKET).createSignedUrl(caminho, 3600);
+    return data?.signedUrl ?? null;
+  };
+
+  const { data: existentes } = await admin.storage.from(BUCKET).list(pasta, { limit: 100 });
+  const lista = (existentes ?? []).filter((f) => f.id);
+  if (lista.some((f) => f.name === arquivo)) {
+    const url = await assinar();
+    if (url) return { ok: true, url, frase };
+  }
+  if (lista.length >= AUDIO_AMOSTRAS_NOMES_MAX) {
+    return { ok: false, status: 429, corpo: { error: "Este livro já usou todas as amostras de nome. Siga com a pronúncia que você escreveu.", reason: "limite_amostras" } };
+  }
+  try {
+    const r = await sintetizar(textoFala, vozPedida);
+    const aparado = aparar(nivelar(r.pcm).pcm, r.taxa);
+    const mp3 = juntarBytes([
+      codificarMp3(silencio(200, TAXA_SAIDA)),
+      codificarMp3(reamostrar(masterizar(aparado, r.taxa).pcm, r.taxa, TAXA_SAIDA)),
+    ]);
+    const { error } = await admin.storage.from(BUCKET).upload(caminho, mp3, { contentType: "audio/mpeg", upsert: true });
+    if (error) {
+      console.error("[audiolivro] amostra de nome upload:", error.message);
+      return { ok: false, status: 500, corpo: { error: "Não foi possível preparar a amostra." } };
+    }
+    const url = await assinar();
+    if (url) return { ok: true, url, frase };
+    return { ok: false, status: 500, corpo: { error: "Não foi possível preparar a amostra." } };
+  } catch (e) {
+    console.warn("[audiolivro] amostra de nome:", e instanceof Error ? e.message : e);
+    if (e instanceof ErroTts && e.tipo === "limite") {
+      return { ok: false, status: 503, corpo: { error: "Muitas amostras ao mesmo tempo. Tente de novo em alguns segundos.", reason: "limite" } };
+    }
+    return { ok: false, status: 502, corpo: { error: "Não foi possível preparar a amostra agora. Tente de novo em instantes." } };
+  }
 }

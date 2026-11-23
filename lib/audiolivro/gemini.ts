@@ -86,8 +86,11 @@ async function chamar(modelo: string, chave: string, corpo: unknown, rotulo: str
   }
   if (!res.ok) {
     const corpoInteiro = await res.text().catch(() => "");
-    const tipo: TipoErroTts = res.status === 429 ? "limite" : res.status >= 500 ? "temporario" : "definitivo";
-    const diario = res.status === 429 && /per_day|perday|per day/i.test(corpoInteiro);
+    // Créditos ou orçamento da conta esgotados contam como o limite do dia:
+    // a narração pausa e a tela avisa, em vez de marcar o trecho como falho.
+    const semCredito = (res.status === 429 || res.status === 403) && /billing|spend|prepay|credit|exhausted/i.test(corpoInteiro);
+    const tipo: TipoErroTts = res.status === 429 || semCredito ? "limite" : res.status >= 500 ? "temporario" : "definitivo";
+    const diario = semCredito || (res.status === 429 && /per_day|perday|per day/i.test(corpoInteiro));
     throw new ErroTts(`Gemini ${rotulo} ${res.status}: ${corpoInteiro.slice(0, 300)}`, tipo, res.status, diario);
   }
   return (await res.json()) as RespostaGemini;

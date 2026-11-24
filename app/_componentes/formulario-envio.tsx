@@ -104,9 +104,9 @@ export default function Assistente() {
           Envie o texto do seu livro, aprove os capítulos, escolha a voz e confira os nomes. A narração roda sozinha e você recebe um arquivo de áudio por capítulo.
         </p>
         <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-tinta-suave">
-          <li>Nesta demonstração, a narração vai até 15 mil caracteres (os primeiros capítulos, cerca de 16 minutos de áudio).</li>
-          <li>Você pode refazer ou ajustar até 10 trechos depois de ouvir.</li>
-          <li>Mantenha a página aberta enquanto o livro é narrado.</li>
+          <li>Livro de qualquer tamanho: todos os capítulos são narrados.</li>
+          <li>Depois de ouvir, você pode refazer ou ajustar a fala de qualquer trecho.</li>
+          <li>Mantenha a página aberta enquanto o livro é narrado. Livros longos levam mais tempo.</li>
         </ul>
         <button onClick={() => setPasso(1)} className="mt-6 rounded-md bg-tinta px-5 py-2.5 font-medium text-folha hover:bg-tinta/90">
           Começar

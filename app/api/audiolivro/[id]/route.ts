@@ -21,7 +21,7 @@ export const maxDuration = 300;
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/adaptadores/supabase";
 import { hashDoEndereco, lerLivro, narracoesRecentes, tokenConfere } from "@/lib/adaptadores/livros";
-import { LIMITE_CARACTERES, LIMITE_LIVROS_DIA, LIMITE_LIVROS_IP_DIA, LIMITE_REGENERACOES } from "@/lib/adaptadores/limites";
+import { LIMITE_CARACTERES, LIMITE_LIVROS_DIA, LIMITE_LIVROS_IP_DIA, LIMITE_REGENERACOES, paraTela } from "@/lib/adaptadores/limites";
 import { MSG_SEM_CREDITOS, creditosEsgotados } from "@/lib/adaptadores/avisos";
 import {
   amostraDaVoz,
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     status,
     links,
     previa: dados ? null : previaDoLivro(livroParaAudio(livro)),
-    limites: { caracteres: LIMITE_CARACTERES, regeneracoes: LIMITE_REGENERACOES },
+    limites: { caracteres: paraTela(LIMITE_CARACTERES), regeneracoes: paraTela(LIMITE_REGENERACOES) },
     creditos_esgotados: await creditosEsgotados(admin),
   });
 }
@@ -110,7 +110,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       if (await creditosEsgotados(admin)) {
         return NextResponse.json({ error: MSG_SEM_CREDITOS, reason: "sem_creditos" }, { status: 503 });
       }
-      if (!livro.exemplo) {
+      const comLimiteDiario = Number.isFinite(LIMITE_LIVROS_DIA) || Number.isFinite(LIMITE_LIVROS_IP_DIA);
+      if (!livro.exemplo && comLimiteDiario) {
         const uso = await narracoesRecentes(admin, hashDoEndereco(req));
         if (uso.total >= LIMITE_LIVROS_DIA) {
           return NextResponse.json({ error: "A demonstração atingiu o limite de livros narrados hoje. Tente de novo amanhã.", reason: "limite_dia" }, { status: 429 });

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   const admin = supabaseAdmin();
   const ipHash = hashDoEndereco(req);
-  if ((await enviosRecentes(admin, ipHash)) >= LIMITE_ENVIOS_IP_DIA) {
+  if (Number.isFinite(LIMITE_ENVIOS_IP_DIA) && (await enviosRecentes(admin, ipHash)) >= LIMITE_ENVIOS_IP_DIA) {
     return erro(429, "Muitos envios deste endereço hoje. Tente de novo amanhã.");
   }
 

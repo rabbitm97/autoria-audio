@@ -18,7 +18,6 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  AUDIO_AMOSTRAS_NOMES_MAX,
   AUDIO_CARACTERES_POR_SEGUNDO,
   AUDIO_CONCORRENCIA,
   AUDIO_DURACAO_FOLGA_MS,
@@ -862,8 +861,8 @@ export async function amostraDaVoz(admin: SupabaseClient, vozPedida: unknown): P
 
 /**
  * A voz escolhida fala a frase do livro em que o nome aparece, já com a
- * pronúncia que o autor escreveu. Guardada na pasta do livro e limitada a
- * AUDIO_AMOSTRAS_NOMES_MAX por livro; a mesma voz + frase não é gerada duas vezes.
+ * pronúncia que o autor escreveu. Guardada na pasta do livro; a mesma voz +
+ * frase não é gerada duas vezes.
  */
 export async function amostraDoNome(
   admin: SupabaseClient,
@@ -887,14 +886,11 @@ export async function amostraDoNome(
     return data?.signedUrl ?? null;
   };
 
-  const { data: existentes } = await admin.storage.from(BUCKET).list(pasta, { limit: 100 });
+  const { data: existentes } = await admin.storage.from(BUCKET).list(pasta, { limit: 1000 });
   const lista = (existentes ?? []).filter((f) => f.id);
   if (lista.some((f) => f.name === arquivo)) {
     const url = await assinar();
     if (url) return { ok: true, url, frase };
-  }
-  if (lista.length >= AUDIO_AMOSTRAS_NOMES_MAX) {
-    return { ok: false, status: 429, corpo: { error: "Este livro já usou todas as amostras de nome. Siga com a pronúncia que você escreveu.", reason: "limite_amostras" } };
   }
   try {
     const r = await sintetizar(textoFala, vozPedida);

@@ -40,7 +40,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </header>
         <main className="flex-1">{children}</main>
         <footer className="border-t border-linha px-5 py-6 text-center text-xs text-tinta-suave">
-          O módulo de audiolivro da <a href="https://useautoria.com" className="underline hover:text-tinta">Autoria</a>. Demonstração com limite de tamanho e de uso diário.
+          O módulo de audiolivro da <a href="https://useautoria.com" className="underline hover:text-tinta">Autoria</a>, em versão de demonstração.
         </footer>
       </body>
     </html>

@@ -112,7 +112,7 @@ export default function AprovacaoCapitulos({
   const [arbitragem, setArbitragem] = useState<"ok" | "indisponivel" | "nao_necessaria">("nao_necessaria");
   const [reidratado, setReidratado] = useState(false);
   const [incluirAbertura, setIncluirAbertura] = useState(true);
-  const [limite, setLimite] = useState(15000);
+  const [limite, setLimite] = useState<number | null>(null);
   const [erroCarga, setErroCarga] = useState<string | null>(null);
 
   const [edicao, setEdicao] = useState<Edicao | null>(null);
@@ -154,7 +154,7 @@ export default function AprovacaoCapitulos({
     setArbitragem((json.arbitragem as typeof arbitragem) ?? "nao_necessaria");
     setReidratado(json.reidratado === true);
     setIncluirAbertura(json.incluir_abertura !== false);
-    setLimite(Number(json.limite_caracteres) || 15000);
+    setLimite(typeof json.limite_caracteres === "number" ? json.limite_caracteres : null);
     setErroCarga(null);
   }, [chamar]);
 
@@ -567,7 +567,9 @@ export default function AprovacaoCapitulos({
           {aprovando ? "Montando os capítulos…" : `Confirmar ${marcados.size} capítulo${marcados.size === 1 ? "" : "s"} e continuar`}
         </button>
       </div>
-      <p className="text-xs text-tinta-suave">Nesta demonstração, a narração vai até {milhar(limite)} caracteres: se o livro passar disso, entram os primeiros capítulos.</p>
+      {limite !== null && (
+        <p className="text-xs text-tinta-suave">Nesta demonstração, a narração vai até {milhar(limite)} caracteres: se o livro passar disso, entram os primeiros capítulos.</p>
+      )}
 
       {destino && edicao && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

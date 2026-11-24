@@ -33,7 +33,7 @@ import {
 import { aplicarTitulosDoWord, buscarNoTexto, proporCapitulos, reaplicarDecisoes } from "@/lib/adaptadores/deteccao";
 import { conferirComIa } from "@/lib/adaptadores/arbitragem";
 import { capitulosDoTexto, cortarNoLimite, lerAbertura, lerTrecho, salvarTrecho, type Destino } from "@/lib/adaptadores/edicao";
-import { LIMITE_CARACTERES } from "@/lib/adaptadores/limites";
+import { LIMITE_CARACTERES, paraTela } from "@/lib/adaptadores/limites";
 import type { CapituloAprovado } from "@/lib/adaptadores/tipos";
 import { erro } from "@/lib/api/respostas";
 
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     reidratado,
     incluir_abertura: m.incluir_abertura,
     caracteres: m.texto.length,
-    limite_caracteres: LIMITE_CARACTERES,
+    limite_caracteres: paraTela(LIMITE_CARACTERES),
     narracao_comecou: !!livro.dados,
   });
 }

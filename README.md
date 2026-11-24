@@ -32,10 +32,13 @@ Quem recebe o link do livro só ouve. Mudar a narração exige o token guardado 
 
 ## Limites da demonstração
 
-- Até 15 mil caracteres por livro (passando disso, entram os primeiros capítulos) e arquivo de até 50 MB.
-- 10 regenerações por livro, contando "gerar de novo", edição de fala e mudança de pronúncia em trechos já narrados.
-- 3 livros narrados por endereço e 40 no total por dia.
-- A narração anda enquanto a página está aberta. Se a cota ou o orçamento do serviço de voz acabar, a demonstração avisa na página inicial e na tela do livro, não começa narrações novas e retoma de onde parou quando os créditos voltam.
+Para a competição, a demonstração não tem limite de uso: livro de qualquer tamanho (todos os capítulos são narrados), quantos livros e envios quiser e regenerações à vontade. Cada limite pode ser religado por variável de ambiente (`LIMITE_CARACTERES`, `LIMITE_LIVROS_DIA`, `LIMITE_LIVROS_IP_DIA`, `LIMITE_ENVIOS_IP_DIA`, `LIMITE_REGENERACOES`), se o gasto com a voz precisar de freio.
+
+O que continua valendo vem de fora da aplicação:
+
+- arquivo de até 50 MB, o limite de envio do Supabase (o mesmo da plataforma);
+- a narração anda enquanto a página está aberta;
+- se a cota ou o orçamento do serviço de voz acabar, a demonstração avisa na página inicial e na tela do livro, não começa narrações novas e retoma de onde parou quando os créditos voltam.
 
 ## Tecnologia
 

@@ -60,7 +60,8 @@ interface RespostaGet {
   status: StatusAudio;
   links: Record<number, string>;
   previa: { capitulos: CapituloPrevia[]; caracteres: number } | null;
-  limites: { caracteres: number; regeneracoes: number };
+  /** null = sem limite. */
+  limites: { caracteres: number | null; regeneracoes: number | null };
   creditos_esgotados: boolean;
 }
 
@@ -70,7 +71,7 @@ interface UsoPreparacao {
 }
 
 type Pendencia =
-  | { tipo: "confirmar"; uso: UsoPreparacao; restantes: number; voz: VozAudio; descartadas: number }
+  | { tipo: "confirmar"; uso: UsoPreparacao; restantes: number | null; voz: VozAudio; descartadas: number }
   | { tipo: "regeneracoes"; precisa: number; restantes: number };
 
 // ─── Textos e utilitários ───────────────────────────────────────────────────
@@ -232,7 +233,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
       setPendencia({
         tipo: "confirmar",
         uso: json.uso as UsoPreparacao,
-        restantes: json.regeneracoes_restantes as number,
+        restantes: (json.regeneracoes_restantes as number | null) ?? null,
         voz: comVoz,
         descartadas: (json.edicoes_descartadas as number | undefined) ?? 0,
       });
@@ -369,7 +370,8 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
   const dados = info?.dados ?? null;
   const status = info?.status;
   const dono = info?.dono ?? false;
-  const regeneracoesRestantes = info && dados ? Math.max(0, info.limites.regeneracoes - dados.regeneracoes_usadas) : 0;
+  const limiteRegeneracoes = info?.limites.regeneracoes ?? null;
+  const regeneracoesRestantes = limiteRegeneracoes === null ? Number.POSITIVE_INFINITY : dados ? Math.max(0, limiteRegeneracoes - dados.regeneracoes_usadas) : 0;
   const nomesArquivos = nomesDosArquivos(dados?.capitulos ?? []);
   const ouvindoNome = amostra?.voz.startsWith("nome:") ? amostra : null;
 
@@ -401,7 +403,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
         )}
         {info?.livro.cortado && (
           <div className="bg-folha border border-linha rounded-xl p-4 text-sm text-tinta-suave mb-6">
-            O livro passou do limite da demonstração ({milhar(info.limites.caracteres)} caracteres): entraram só os primeiros capítulos.
+            O livro passou do limite da demonstração{info.limites.caracteres !== null && <> ({milhar(info.limites.caracteres)} caracteres)</>}: entraram só os primeiros capítulos.
           </div>
         )}
         {erro && <div role="alert" className="bg-folha border border-erro/30 rounded-xl p-4 text-sm text-erro mb-6">{erro}</div>}
@@ -416,7 +418,8 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
                   <ul className="text-sm text-tinta-suave space-y-1.5 list-disc pl-5">
                     {pendencia.uso.regeneracoes > 0 && (
                       <li>
-                        Refaz {pendencia.uso.regeneracoes} trecho{pendencia.uso.regeneracoes > 1 ? "s" : ""} já narrado{pendencia.uso.regeneracoes > 1 ? "s" : ""} e usa {pendencia.uso.regeneracoes} regeneraç{pendencia.uso.regeneracoes > 1 ? "ões" : "ão"} (restam {pendencia.restantes})
+                        Refaz {pendencia.uso.regeneracoes} trecho{pendencia.uso.regeneracoes > 1 ? "s" : ""} já narrado{pendencia.uso.regeneracoes > 1 ? "s" : ""}
+                        {pendencia.restantes !== null && <> e usa {pendencia.uso.regeneracoes} regeneraç{pendencia.uso.regeneracoes > 1 ? "ões" : "ão"} (restam {pendencia.restantes})</>}
                       </li>
                     )}
                     {pendencia.descartadas > 0 && (
@@ -530,7 +533,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
                 <span className="text-sm text-tinta">
                   Conferi os nomes e ouvi como a voz fala os que podem sair errado.
                   <span className="block text-xs text-tinta-suave mt-1">
-                    Depois que a narração começa, corrigir uma pronúncia refaz os trechos com aquele nome, e cada trecho refeito usa uma regeneração.
+                    Depois que a narração começa, corrigir uma pronúncia refaz os trechos com aquele nome{limiteRegeneracoes !== null ? ", e cada trecho refeito usa uma regeneração" : ""}.
                   </span>
                 </span>
               </label>
@@ -539,7 +542,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
             <section className="bg-folha rounded-2xl border border-linha p-6 flex flex-wrap items-center justify-between gap-4">
               <div className="text-sm text-tinta-suave">
                 <p>
-                  {milhar(info.previa.caracteres)} de {milhar(info.limites.caracteres)} caracteres · {duracaoEstimada(info.previa.caracteres)} de áudio
+                  {milhar(info.previa.caracteres)}{info.limites.caracteres !== null && <> de {milhar(info.limites.caracteres)}</>} caracteres · {duracaoEstimada(info.previa.caracteres)} de áudio
                 </p>
                 <p className="text-xs mt-1">Mantenha esta página aberta enquanto o livro é narrado.</p>
               </div>
@@ -562,7 +565,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
                 <p className="text-sm text-tinta-suave">
                   Voz: <span className="font-medium text-tinta">{nomeVoz(dados.voz)}</span>
                   {" · "}{milhar(dados.caracteres)} caracteres
-                  {dono && <>{" · "}Regenerações: {regeneracoesRestantes} de {info.limites.regeneracoes}</>}
+                  {dono && limiteRegeneracoes !== null && <>{" · "}Regenerações: {regeneracoesRestantes} de {limiteRegeneracoes}</>}
                 </p>
                 {dono && !status.terminado && !rodando && !info.creditos_esgotados && (
                   <button onClick={() => void gerar()} className="text-xs px-4 py-2 rounded-lg bg-tinta text-folha font-semibold">Continuar a geração</button>
@@ -660,7 +663,7 @@ export default function TelaAudiolivro({ id, token }: { id: string; token: strin
                       Salvar e refazer só os trechos com esses nomes
                     </button>
                     <p className="text-xs text-tinta-suave mt-2">
-                      Cada trecho já narrado que tiver o nome é refeito e usa uma regeneração. Antes de refazer, mostramos quantas.
+                      Cada trecho já narrado que tiver o nome é refeito{limiteRegeneracoes !== null ? " e usa uma regeneração" : ""}. Antes de refazer, mostramos quantos.
                     </p>
                   </div>
                 )}
@@ -766,7 +769,7 @@ function ItemTrecho({
               disabled={rodando || semCota}
               className="text-xs px-3 py-1.5 rounded-lg border border-linha text-tinta-suave hover:border-latao/40 disabled:opacity-50"
             >
-              {falhou ? "Tentar de novo" : `Gerar de novo · restam ${restantes}`}
+              {falhou ? "Tentar de novo" : Number.isFinite(restantes) ? `Gerar de novo · restam ${restantes}` : "Gerar de novo"}
             </button>
             <button
               onClick={() => { setTexto(t.texto_fala); setErroEdicao(null); setEditando((v) => !v); }}
